@@ -4,6 +4,7 @@ use cozy_chess::{Move, Piece, Square};
 use utils::memory::prefetch;
 
 use crate::scores::MATE_SCORE_BOUND;
+use crate::utils::Bounds;
 
 /// Indicates whether the stored value is exact or a bound.
 #[derive(Clone, Copy, PartialEq, Default)]
@@ -18,7 +19,6 @@ pub enum Bound {
 }
 
 /// Result from probing the transposition table.
-/// Caller should check depth to decide if value/bound are trustworthy for cutoffs.
 #[derive(Clone, Copy)]
 pub struct ProbeResult {
     /// Score from the previous search, mate-adjusted to the probing ply.
@@ -31,6 +31,17 @@ pub struct ProbeResult {
     pub static_eval: Option<i16>,
     /// Depth of the search that produced this entry.
     pub depth: u8,
+}
+
+impl ProbeResult {
+    /// Check if the TT entry covers a window.
+    pub fn covers(&self, bounds: Bounds) -> bool {
+        match self.bound {
+            Bound::Exact => true,
+            Bound::Lower => bounds.is_cutoff(self.value),
+            Bound::Upper => self.value <= bounds.alpha,
+        }
+    }
 }
 
 /// A single TT entry (16 bytes, fits 4 per cache line).
@@ -122,7 +133,6 @@ impl TranspositionTable {
     }
 
     /// Probes the TT for a matching entry, returning the deepest match.
-    /// Caller should check result.depth before using value/bound for cutoffs.
     pub fn probe(&self, hash: u64, ply: u8) -> Option<ProbeResult> {
         let idx = (hash as usize) % self.buckets;
         let base = idx * CLUSTER_SIZE;
