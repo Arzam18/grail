@@ -23,7 +23,7 @@ impl Searcher {
 
     /// Check if the position is a forced draw (fifty-move rule or repetition).
     pub(super) fn is_forced_draw(&self, node: &Node) -> bool {
-        node.is_fifty_move_draw() || self.search_stack.is_repetition(&self.game_history)
+        node.is_fifty_move_draw() || self.search_stack.is_repetition(node, &self.game_history)
     }
 
     /// Probe Syzygy tablebases for an exact WDL score. Returns None if

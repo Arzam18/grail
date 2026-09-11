@@ -107,22 +107,23 @@ impl SearchStack {
 
     /// Detects a single repetition and treats it as a draw.
     /// We don't require threefold because the search tends to cycle once it finds a repetition.
-    pub fn is_repetition(&self, game_history: &ahash::AHashSet<u64>) -> bool {
-        let current_hash = self.nodes[self.nodes.len() - 1].hash;
+    pub fn is_repetition(&self, node: &Node, game_history: &ahash::AHashSet<u64>) -> bool {
+        let ply = self.nodes.len() - 1;
+        let hash = node.hash();
+        let halfmove_clock = node.board().halfmove_clock() as usize;
 
-        // Check if this position was seen in the game before we started searching
-        if game_history.contains(&current_hash) {
-            return true;
-        }
-
-        // Check search path (skip current position)
-        for node in self.nodes.iter().rev().skip(1) {
-            if node.hash == current_hash {
+        // No need to look back further than the halfmove clock because
+        // you can't undo those moves.
+        // Also stepped by 2 because color is baked into the hash, so one ply back can never match anyways.
+        let max_back = halfmove_clock.min(ply);
+        for back in (2..=max_back).step_by(2) {
+            if self.nodes[ply - back].hash == hash {
                 return true;
             }
         }
 
-        false
+        // Same here, only bother with the game history if the clock reaches past the root.
+        halfmove_clock > ply && game_history.contains(&hash)
     }
 
     /// Previous-move context for continuation history/correction.
