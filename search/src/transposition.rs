@@ -96,12 +96,7 @@ impl TranspositionTable {
     }
 
     pub fn clear(&mut self) {
-        // Clear TT entries
-        unsafe {
-            let ptr = self.entries.as_mut_ptr() as *mut u8;
-            let size = self.entries.len() * size_of::<TTEntry>();
-            std::ptr::write_bytes(ptr, 0, size);
-        }
+        self.entries.fill(TTEntry::default());
         self.generation = 0;
     }
 
