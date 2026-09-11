@@ -1,4 +1,4 @@
-use cozy_chess::{Color, Move, Piece};
+use cozy_chess::Move;
 use utils::Node;
 
 use crate::history::{PieceTo, PrevMoves};
@@ -15,12 +15,8 @@ pub struct SingularSearch {
 pub struct SearchNode {
     /// Zobrist hash for repetition detection
     pub hash: u64,
-    /// Move that led to this position
-    pub last_move: Option<Move>,
-    /// Piece that moved (for continuation history)
-    pub piece: Option<Piece>,
-    /// Color of the piece that moved (for continuation history)
-    pub color: Option<Color>,
+    /// Move that led here, for continuation history
+    pub moved: Option<PieceTo>,
     /// Best-known eval at this ply (TT score when available, else corrected static eval)
     pub eval: Option<i16>,
     /// Singular extension context (if in singular search)
@@ -31,20 +27,16 @@ impl SearchNode {
     pub fn new(hash: u64) -> Self {
         Self {
             hash,
-            last_move: None,
-            piece: None,
-            color: None,
+            moved: None,
             eval: None,
             singular: None,
         }
     }
 
-    pub fn with_move(hash: u64, mv: Move, piece: Piece, color: Color) -> Self {
+    pub fn with_move(hash: u64, moved: PieceTo) -> Self {
         Self {
             hash,
-            last_move: Some(mv),
-            piece: Some(piece),
-            color: Some(color),
+            moved: Some(moved),
             eval: None,
             singular: None,
         }
@@ -74,8 +66,8 @@ impl SearchStack {
         self.push(SearchNode::new(node.hash()));
     }
 
-    pub fn push_move(&mut self, node: &Node, mv: Move, piece: Piece, color: Color) {
-        self.push(SearchNode::with_move(node.hash(), mv, piece, color));
+    pub fn push_move(&mut self, node: &Node, moved: PieceTo) {
+        self.push(SearchNode::with_move(node.hash(), moved));
     }
 
     pub fn pop(&mut self) -> Option<SearchNode> {
@@ -139,10 +131,7 @@ impl SearchStack {
         let mut prev_moves: PrevMoves = Default::default();
         let len = self.nodes.len();
         for (i, slot) in prev_moves.iter_mut().enumerate().take(len) {
-            let node = &self.nodes[len - 1 - i];
-            if let (Some(mv), Some(piece), Some(color)) = (node.last_move, node.piece, node.color) {
-                *slot = Some(PieceTo::new(color, piece, mv.to));
-            }
+            *slot = self.nodes[len - 1 - i].moved;
         }
         prev_moves
     }

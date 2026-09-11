@@ -555,15 +555,13 @@ impl Searcher {
             return None;
         }
 
+        let moved = PieceTo::new(moved_color, moved_piece, m.to);
         let hist = if is_cap {
             self.capture_history.get(node.board(), m)
         } else {
             self.history_heuristic.get(moved_color, m.from, m.to)
         };
-        let cont_hist = {
-            let pt = PieceTo::new(moved_color, moved_piece, m.to);
-            self.continuation_history.get(prev_moves, pt)
-        };
+        let cont_hist = self.continuation_history.get(prev_moves, moved);
 
         if self.try_history_prune(depth, is_pv_move, is_cap, is_improving, hist, cont_hist) {
             return None;
@@ -616,8 +614,7 @@ impl Searcher {
             Bounds::null(bounds.alpha).invert()
         };
 
-        self.search_stack
-            .push_move(&child, m, moved_piece, moved_color);
+        self.search_stack.push_move(&child, moved);
         let mut value = -self.search_node(
             &child,
             adjusted_depth.saturating_sub(1),
@@ -639,8 +636,7 @@ impl Searcher {
             // Search at full depth
             adjusted_depth = depth.saturating_add(extension);
 
-            self.search_stack
-                .push_move(&child, m, moved_piece, moved_color);
+            self.search_stack.push_move(&child, moved);
             value = -self.search_node(
                 &child,
                 adjusted_depth.saturating_sub(1),
@@ -655,8 +651,7 @@ impl Searcher {
         if value > bounds.alpha && value < bounds.beta && !is_pv_move && is_pv_node {
             child.set_type(NodeType::Pv);
 
-            self.search_stack
-                .push_move(&child, m, moved_piece, moved_color);
+            self.search_stack.push_move(&child, moved);
             value = -self.search_node(
                 &child,
                 adjusted_depth.saturating_sub(1),
