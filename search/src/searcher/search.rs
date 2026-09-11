@@ -235,7 +235,6 @@ impl Searcher {
 
         let singular = self.search_stack.current().and_then(|n| n.singular);
 
-        self.check_limits();
         if self.shared.is_stopped() {
             return 0;
         }

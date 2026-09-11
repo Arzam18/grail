@@ -88,11 +88,8 @@ pub struct Searcher {
 }
 
 impl Searcher {
-    /// How often (in nodes) to sync the local node count to the shared atomic counter.
+    /// How often (in nodes) to sync the local node count to the shared atomic counter / hard limits.
     const NODE_SYNC_INTERVAL: u64 = 1024;
-
-    /// How often (in nodes) to check if the hard time deadline has been reached.
-    const TIME_CHECK_INTERVAL: u64 = 1024;
 
     pub fn new(
         shared: Arc<SharedSearcherState>,
@@ -100,7 +97,7 @@ impl Searcher {
         config: &EngineConfig,
         evaluator: nnue::Evaluator,
     ) -> Self {
-        let mut instance = Self {
+        Self {
             shared,
             thread_id,
             config: config.clone(),
@@ -117,9 +114,9 @@ impl Searcher {
 
             search_stack: SearchStack::with_capacity(MAX_DEPTH),
 
-            history_heuristic: HistoryHeuristic::new(1, 1, 1),
-            capture_history: CaptureHistory::new(1, 1, 1),
-            continuation_history: ContinuationHistory::new(1, 1, 1, 1),
+            history_heuristic: HistoryHeuristic::new(config),
+            capture_history: CaptureHistory::new(config),
+            continuation_history: ContinuationHistory::new(config),
 
             lmr: LmrTable::new(config.lmr_divisor),
 
@@ -129,10 +126,7 @@ impl Searcher {
             node_limit: None,
 
             nmp_min_ply: 0,
-        };
-
-        instance.configure(config);
-        instance
+        }
     }
 
     pub fn configure(&mut self, config: &EngineConfig) {
@@ -172,19 +166,16 @@ impl Searcher {
     }
 
     fn increment_nodes(&mut self) {
-        self.nodes = self.nodes.wrapping_add(1);
+        self.nodes += 1;
         if self.nodes >= Self::NODE_SYNC_INTERVAL {
             self.sync_nodes();
+            self.check_limits();
         }
     }
 
     /// Checks if any hard search limit has been reached (time deadline or
     /// total node count). Sets the shared stop flag when triggered.
     fn check_limits(&self) {
-        if !self.nodes.is_multiple_of(Self::TIME_CHECK_INTERVAL) {
-            return;
-        }
-
         if let Some(deadline) = self.deadline {
             if Instant::now() >= deadline {
                 self.shared.set_stop(true);
@@ -202,10 +193,6 @@ impl Searcher {
         }
     }
 
-    fn total_nodes(&self) -> u64 {
-        self.shared.total_nodes()
-    }
-
     fn send_search_info(
         &self,
         output: &Sender<UciOutput>,
@@ -214,7 +201,7 @@ impl Searcher {
         elapsed: std::time::Duration,
     ) {
         let found_checkmate = pv.score.abs() >= MATE_VALUE - MAX_DEPTH as i16;
-        let total = self.total_nodes();
+        let total = self.shared.total_nodes();
         let secs = elapsed.as_secs_f64();
         let nps = if secs > 0.0 {
             (total as f64 / secs) as u64

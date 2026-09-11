@@ -28,19 +28,15 @@ pub struct ContinuationHistory {
 }
 
 impl ContinuationHistory {
-    pub fn new(
-        max_moves: usize,
-        max_history: i32,
-        bonus_multiplier: i32,
-        malus_multiplier: i32,
-    ) -> Self {
-        let size = Self::table_size(max_moves);
+    pub fn new(config: &EngineConfig) -> Self {
+        let max_moves = config.continuation_max_moves;
+
         Self {
-            continuations: vec![0; size],
+            continuations: vec![0; Self::table_size(max_moves)],
             max_moves,
-            max_history,
-            bonus_multiplier,
-            malus_multiplier,
+            max_history: config.continuation_max_value,
+            bonus_multiplier: config.continuation_bonus_multiplier,
+            malus_multiplier: config.continuation_malus_multiplier,
         }
     }
 
