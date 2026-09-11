@@ -325,7 +325,7 @@ impl Searcher {
                 bounds,
                 in_check,
                 null_move_allowed,
-                Some(corrected_eval),
+                corrected_eval,
                 static_eval,
             ) {
                 return score;
