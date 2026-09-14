@@ -22,14 +22,12 @@ pub struct HistoryHeuristic {
 }
 
 impl HistoryHeuristic {
-    pub fn new(max_history: i32, bonus_multiplier: i32, malus_multiplier: i32) -> Self {
+    pub fn new(config: &EngineConfig) -> Self {
         Self {
             history: vec![0; HISTORY_SIZE],
-
-            max_history,
-
-            bonus_multiplier,
-            malus_multiplier,
+            max_history: config.history_max_value,
+            bonus_multiplier: config.history_bonus_multiplier,
+            malus_multiplier: config.history_malus_multiplier,
         }
     }
 

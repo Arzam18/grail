@@ -8,7 +8,7 @@ use utils::Node;
 use crate::{
     MAX_DEPTH,
     move_ordering::QMoveGenerator,
-    transposition::Bound,
+    transposition::ProbeResult,
     utils::{Bounds, see::see},
 };
 
@@ -55,14 +55,11 @@ impl Searcher {
         let original_bounds = bounds;
 
         let tt_info = self.shared.tt().probe(hash, ply);
+
+        // Test if we can early-return using the TT.
         if let Some(tt) = tt_info {
-            if !node.is_pv() {
-                match tt.bound {
-                    Bound::Exact => return tt.value,
-                    Bound::Lower if bounds.is_cutoff(tt.value) => return tt.value,
-                    Bound::Upper if tt.value <= bounds.alpha => return tt.value,
-                    _ => {}
-                }
+            if can_tt_cutoff(tt, bounds, node.is_pv()) {
+                return tt.value;
             }
         }
 
@@ -230,4 +227,9 @@ impl Searcher {
             self.capture_history.update_capture(board, c, malus);
         }
     }
+}
+
+/// Check if a TT entry can cutoff the search early
+fn can_tt_cutoff(tt: ProbeResult, bounds: Bounds, is_pv: bool) -> bool {
+    !is_pv && tt.covers(bounds)
 }

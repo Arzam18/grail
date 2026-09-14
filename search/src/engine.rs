@@ -63,8 +63,7 @@ impl Engine {
             }
         }
 
-        let new_num_threads = config.threads;
-        while self.searchers.len() < new_num_threads {
+        while self.searchers.len() < config.threads {
             let thread_id = self.searchers.len();
             let evaluator = (self.create_evaluator)();
             self.searchers.push(Searcher::new(
@@ -74,7 +73,7 @@ impl Engine {
                 evaluator,
             ));
         }
-        self.searchers.truncate(new_num_threads);
+        self.searchers.truncate(config.threads);
 
         for searcher in &mut self.searchers {
             searcher.configure(config);

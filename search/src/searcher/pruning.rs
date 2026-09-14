@@ -59,7 +59,7 @@ impl Searcher {
         in_check: bool,
         eval: i16,
     ) -> Option<i16> {
-        if depth == 0 || depth > self.config.razor_max_depth || in_check {
+        if depth > self.config.razor_max_depth || in_check {
             return None;
         }
         let margin = self.config.razor_base_margin
@@ -146,7 +146,7 @@ impl Searcher {
         bounds: Bounds,
         in_check: bool,
         try_null_move: bool,
-        corrected_eval: Option<i16>,
+        corrected_eval: i16,
         static_eval: i16,
     ) -> Option<i16> {
         if !try_null_move
@@ -160,10 +160,8 @@ impl Searcher {
         }
 
         // No point proving that our position is too good if we dont clear beta.
-        if let Some(se) = corrected_eval {
-            if se < bounds.beta {
-                return None;
-            }
+        if corrected_eval < bounds.beta {
+            return None;
         }
 
         let nm_child = node.create_null_move_child()?;
@@ -172,15 +170,13 @@ impl Searcher {
         let base_r = self.config.nmp_base_reduction;
         let mut r = base_r + (depth / self.config.nmp_depth_divisor);
 
-        if let Some(se) = corrected_eval {
-            let margin = self.config.nmp_eval_margin;
-            if se >= bounds.beta + margin {
-                // Strong positions get extra reduction
-                r = r.saturating_add(1);
-            } else if se <= bounds.beta - margin {
-                // Weak positions get less reduction
-                r = r.saturating_sub(1).max(base_r);
-            }
+        let margin = self.config.nmp_eval_margin;
+        if corrected_eval >= bounds.beta + margin {
+            // Strong positions get extra reduction
+            r = r.saturating_add(1);
+        } else if corrected_eval <= bounds.beta - margin {
+            // Weak positions get less reduction
+            r = r.saturating_sub(1).max(base_r);
         }
 
         if r >= depth {
@@ -251,7 +247,7 @@ impl Searcher {
         ply: u8,
         is_improving: bool,
     ) -> Option<i16> {
-        if depth == 0 || depth > self.config.rfp_max_depth || in_check || node.is_pv() {
+        if depth > self.config.rfp_max_depth || in_check || node.is_pv() {
             return None;
         }
 
