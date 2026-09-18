@@ -2,9 +2,12 @@ name: Build ARM64
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
+    inputs:
+      uci_date:
+        description: "Grail UCI version/date (example: 20260912)"
+        required: true
+        default: "20260912"
+        type: string
 
 jobs:
   build:
@@ -15,6 +18,53 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Set UCI engine version
+        env:
+          UCI_DATE: ${{ inputs.uci_date }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          uci_date = os.environ["UCI_DATE"]
+
+          old = 'const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");'
+          new = f'const ENGINE_VERSION: &str = "{uci_date}";'
+
+          matches = []
+
+          for path in Path(".").rglob("*.rs"):
+              try:
+                  text = path.read_text()
+              except (UnicodeDecodeError, OSError):
+                  continue
+
+              if old in text:
+                  matches.append(path)
+
+          if len(matches) == 0:
+              raise SystemExit(
+                  "ERROR: Could not find ENGINE_VERSION line."
+              )
+
+          if len(matches) > 1:
+              raise SystemExit(
+                  f"ERROR: Found ENGINE_VERSION in multiple files: {matches}"
+              )
+
+          path = matches[0]
+          text = path.read_text()
+
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          print(f"Modified file: {path}")
+          print(f"UCI version: {uci_date}")
+          PY
+
+          echo "Modified ENGINE_VERSION line:"
+          grep -R 'ENGINE_VERSION' --include='*.rs' .
 
       - name: Install Rust target
         run: |
@@ -50,6 +100,11 @@ jobs:
         run: |
           file target/aarch64-unknown-linux-musl/release/grail-arm64
           ls -lh target/aarch64-unknown-linux-musl/release/grail-arm64
+
+      - name: Verify UCI identification
+        run: |
+          echo "UCI identification:"
+          printf "uci\nquit\n" | ./target/aarch64-unknown-linux-musl/release/grail-arm64
 
       - name: Upload ARM64 binary
         uses: actions/upload-artifact@v4
