@@ -1,62 +1,49 @@
-name: Build Android Binary
+name: Build Android
 
 on:
   workflow_dispatch:
   push:
     tags:
       - "v*"
-    branches:
-      - "*"
-  pull_request:
-    branches:
-      - "*"
-
-permissions:
-  contents: write
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           lfs: true
-          fetch-depth: 1
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: aarch64-linux-android
+      - name: Install Rust target
+        run: rustup target add aarch64-linux-android
 
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk
+      - name: Setup Android NDK
+        uses: android-actions/setup-android@v3
 
-      - name: Build Grail for Android
-        env:
-          RUSTFLAGS: ""
-          CARGO_ENCODED_RUSTFLAGS: ""
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: ""
+      - name: Install NDK
+        run: sdkmanager "ndk;27.2.12479018"
+
+      - name: Build Android ARM64
+        shell: bash
         run: |
-          cargo ndk -t arm64-v8a --platform 24 build \
-            --release \
-            -p grail \
-            --bin grail \
-            --config 'build.rustflags=[]' \
-            --config 'target.aarch64-linux-android.rustflags=[]'
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/27.2.12479018"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 
-          mkdir -p dist/bin
-          cp target/aarch64-linux-android/release/grail dist/bin/grail-android-arm64
+          export CC_aarch64_linux_android=aarch64-linux-android24-clang
+          export CXX_aarch64_linux_android=aarch64-linux-android24-clang++
 
-      - name: Verify Binary
+          cargo build --release \
+            --target aarch64-linux-android
+
+      - name: Rename binary
         run: |
-          ls -lh dist/bin/
-          file dist/bin/*
+          mv target/aarch64-linux-android/release/grail \
+             target/aarch64-linux-android/release/grail-arm64-android
 
-      - name: Upload Android Artifact
+      - name: Upload Android binary
         uses: actions/upload-artifact@v4
         with:
           name: grail-android-arm64
-          path: dist/bin/grail-android-arm64
+          path: target/aarch64-linux-android/release/grail-arm64-android
