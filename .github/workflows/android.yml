@@ -1,4 +1,4 @@
-name: Build Android
+name: Build ARM64
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
@@ -17,55 +17,42 @@ jobs:
           lfs: true
 
       - name: Install Rust target
-        run: rustup target add aarch64-linux-android
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: ""
-
-      - name: Install Android NDK
-        run: sdkmanager --install "ndk;27.2.12479018"
-
-      - name: Configure Android NDK
         run: |
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
-          echo "$ANDROID_SDK_ROOT/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+          rustup target add aarch64-unknown-linux-musl
 
-      - name: Check environment
+      # Candle requires a musl C compiler.
+      - name: Install musl toolchain
         run: |
-          echo "FONTCONFIG_NO_PKG_CONFIG=${FONTCONFIG_NO_PKG_CONFIG:-<not set>}"
-          echo "PKG_CONFIG_ALLOW_CROSS=${PKG_CONFIG_ALLOW_CROSS:-<not set>}"
-          which aarch64-linux-android24-clang
-          aarch64-linux-android24-clang --version
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
-      - name: Build Android ARM64
-        env:
-          CC_aarch64_linux_android: aarch64-linux-android24-clang
-          CXX_aarch64_linux_android: aarch64-linux-android24-clang++
-          PKG_CONFIG_ALLOW_CROSS: "1"
+          echo "CC_aarch64_unknown_linux_musl=musl-gcc" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
+
+      - name: Build ARM64
+        shell: bash
         run: |
-          unset FONTCONFIG_NO_PKG_CONFIG
-          unset RUST_FONTCONFIG_DLOPEN
+          set -euo pipefail
 
-          cargo clean
-
-          cargo build --release \
-            --target aarch64-linux-android
+          cargo build \
+            --release \
+            --target aarch64-unknown-linux-musl \
+            -p grail \
+            --bin grail
 
       - name: Rename binary
         run: |
-          mv target/aarch64-linux-android/release/grail \
-             target/aarch64-linux-android/release/grail-arm64-android
+          mv \
+            target/aarch64-unknown-linux-musl/release/grail \
+            target/aarch64-unknown-linux-musl/release/grail-arm64
 
-      - name: Verify binary
+      - name: Check binary
         run: |
-          file target/aarch64-linux-android/release/grail-arm64-android
-          ls -lh target/aarch64-linux-android/release/grail-arm64-android
+          file target/aarch64-unknown-linux-musl/release/grail-arm64
+          ls -lh target/aarch64-unknown-linux-musl/release/grail-arm64
 
-      - name: Upload Android binary
+      - name: Upload ARM64 binary
         uses: actions/upload-artifact@v4
         with:
-          name: grail-android-arm64
-          path: target/aarch64-linux-android/release/grail-arm64-android
+          name: grail-arm64
+          path: target/aarch64-unknown-linux-musl/release/grail-arm64
