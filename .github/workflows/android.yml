@@ -17,7 +17,8 @@ jobs:
           lfs: true
 
       - name: Install Rust target
-        run: rustup target add aarch64-linux-android
+        run: |
+          rustup target add aarch64-linux-android
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
@@ -36,14 +37,25 @@ jobs:
 
       - name: Verify Android toolchain
         run: |
-          echo "NDK: $ANDROID_NDK_HOME"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
           aarch64-linux-android24-clang --version
           aarch64-linux-android24-clang++ --version
+          cargo --version
+          rustc --version
 
       - name: Build Android ARM64
         env:
           CC_aarch64_linux_android: aarch64-linux-android24-clang
           CXX_aarch64_linux_android: aarch64-linux-android24-clang++
+
+          # Prevent pkg-config from trying to use host Linux libraries
+          PKG_CONFIG_ALLOW_CROSS: "1"
+          FONTCONFIG_NO_PKG_CONFIG: "1"
+
+          # Do not use the host pkg-config configuration for Android
+          PKG_CONFIG_aarch64_linux_android: ""
+          PKG_CONFIG_aarch64-linux-android: ""
+
         run: |
           cargo build --release \
             --target aarch64-linux-android
@@ -52,6 +64,11 @@ jobs:
         run: |
           mv target/aarch64-linux-android/release/grail \
              target/aarch64-linux-android/release/grail-arm64-android
+
+      - name: Verify binary
+        run: |
+          file target/aarch64-linux-android/release/grail-arm64-android
+          ls -lh target/aarch64-linux-android/release/grail-arm64-android
 
       - name: Upload Android binary
         uses: actions/upload-artifact@v4
