@@ -109,7 +109,7 @@ impl Searcher {
             // Soft node limit: finish the current iteration, but don't start
             // a new one once the budget is spent.
             if let Some(soft_limit) = params.soft_nodes {
-                if self.shared.total_nodes() + self.nodes >= soft_limit {
+                if self.searched_nodes() >= soft_limit {
                     break;
                 }
             }
@@ -238,7 +238,6 @@ impl Searcher {
         if self.shared.is_stopped() {
             return 0;
         }
-        self.increment_nodes();
 
         if ply > 0 && self.is_forced_draw(node) {
             return self.draw_value();
@@ -613,6 +612,7 @@ impl Searcher {
             Bounds::null(bounds.alpha).invert()
         };
 
+        self.increment_nodes();
         self.search_stack.push_move(&child, moved);
         let mut value = -self.search_node(
             &child,
