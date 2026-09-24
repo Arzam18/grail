@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       uci_date:
-        description: "Grail UCI version/date (example: 20260912)"
+        description: "Grail UCI version/date (example: 20260924)"
         required: true
-        default: "20260912"
+        default: "20260924"
         type: string
 
 jobs:
