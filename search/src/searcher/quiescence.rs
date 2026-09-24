@@ -27,7 +27,6 @@ impl Searcher {
             return 0;
         }
 
-        self.increment_nodes();
         self.max_ply_reached = self.max_ply_reached.max(ply);
 
         if self.is_forced_draw(node) {
@@ -173,6 +172,7 @@ impl Searcher {
 
             let child = Node::new(new_board, node.node_type());
 
+            self.increment_nodes();
             self.search_stack.push_node(&child);
             let child_score = self.quiescence_search(&child, bounds.invert(), ply + 1);
             self.search_stack.pop();

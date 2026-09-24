@@ -173,6 +173,10 @@ impl Searcher {
         }
     }
 
+    fn searched_nodes(&self) -> u64 {
+        self.shared.total_nodes() + self.nodes
+    }
+
     /// Checks if any hard search limit has been reached (time deadline or
     /// total node count). Sets the shared stop flag when triggered.
     fn check_limits(&self) {
@@ -184,10 +188,7 @@ impl Searcher {
         }
 
         if let Some(node_limit) = self.node_limit {
-            // shared.total_nodes() lags by up to NODE_SYNC_INTERVAL per worker,
-            // so add the local count for an accurate-enough estimate.
-            let total = self.shared.total_nodes() + self.nodes;
-            if total >= node_limit {
+            if self.searched_nodes() >= node_limit {
                 self.shared.set_stop(true);
             }
         }
@@ -201,7 +202,7 @@ impl Searcher {
         elapsed: std::time::Duration,
     ) {
         let found_checkmate = pv.score.abs() >= MATE_VALUE - MAX_DEPTH as i16;
-        let total = self.shared.total_nodes();
+        let total = self.searched_nodes();
         let secs = elapsed.as_secs_f64();
         let nps = if secs > 0.0 {
             (total as f64 / secs) as u64
