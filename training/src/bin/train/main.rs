@@ -1,7 +1,7 @@
 mod args;
 mod dataset;
 mod state;
-mod training;
+mod trainer;
 mod utils;
 
 use args::{Args, Command};
@@ -9,6 +9,7 @@ use candle_core::DType;
 use candle_nn::{VarBuilder, VarMap};
 use clap::Parser;
 use dataset::ShardedDataset;
+use nnue::MODEL_PATH;
 use nnue::network::Network;
 use simplelog::{Config, LevelFilter, SimpleLogger};
 use state::TrainingState;
@@ -16,12 +17,9 @@ use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use training::Trainer;
+use trainer::Trainer;
+use training::paths::{DATA_DIR, STATE_PATH};
 use utils::device::get_device;
-
-const DATA_DIR: &str = "nnue/data";
-const MODEL_PATH: &str = "nnue/model.safetensors";
-const STATE_PATH: &str = "nnue/training.json";
 
 fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::init(LevelFilter::Info, Config::default())?;

@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::args::Args;
 use crate::dataset::{DataLoader, ShardReader, ShardedDataset};
 use crate::state::{EpochRecord, TrainingState};
-use crate::training::evaluation::evaluate;
-use crate::training::progress::TrainingProgressBar;
+use crate::trainer::evaluation::evaluate;
+use crate::trainer::progress::TrainingProgressBar;
 use crate::utils::device::get_device;
 use crate::utils::loss::wdl_eval_loss;
 

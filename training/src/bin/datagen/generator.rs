@@ -7,6 +7,7 @@ use crate::worker::SelfPlayWorker;
 use candle_core::Device;
 use candle_nn::VarMap;
 use indicatif::MultiProgress;
+use nnue::MODEL_PATH;
 use pyrrhic_rs::TableBases;
 use search::CozyAdapter;
 use std::error::Error;
@@ -15,7 +16,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
-const MODEL_PATH: &str = "nnue/model.safetensors";
 const PROGRESS_UPDATE_INTERVAL_MS: u64 = 200;
 
 /// Coordinates multi-threaded self-play data generation.

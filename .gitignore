@@ -19,7 +19,7 @@ __pycache__/
 sprt/
 
 # NNUE training data and progress
-nnue/data/
+training/data/
 
 # SPSA
 tuning/params.toml

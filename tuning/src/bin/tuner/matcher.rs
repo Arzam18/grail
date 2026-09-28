@@ -123,12 +123,11 @@ impl Matcher {
 }
 
 fn load_nnue() -> nnue::Evaluator {
-    // TODO: Consider sharing the model path everywhere
-    const MODEL_PATH: &str = "nnue/model.safetensors";
-
     let mut varmap = candle_nn::VarMap::new();
     let mut evaluator = nnue::Evaluator::new(&varmap, &candle_core::Device::Cpu);
-    varmap.load(MODEL_PATH).unwrap();
+
+    varmap.load(nnue::MODEL_PATH).unwrap();
     evaluator.enable_nnue();
+
     evaluator
 }
