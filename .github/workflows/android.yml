@@ -6,7 +6,7 @@ on:
       uci_date:
         description: "Grail UCI version/date (example: 20260924)"
         required: true
-        default: "20260924"
+        default: "20260928"
         type: string
 
 jobs:
