@@ -4,7 +4,7 @@
 Usage:
   python3 scripts/eval_outcome_disagreement.py
   python3 scripts/eval_outcome_disagreement.py -t 600
-  python3 scripts/eval_outcome_disagreement.py -t 800 nnue/data/*.csv
+  python3 scripts/eval_outcome_disagreement.py -t 800 training/data/*.csv
 """
 
 import argparse
@@ -32,7 +32,7 @@ def main():
     parser.add_argument("-t", "--threshold", type=int, default=THRESHOLD)
     args = parser.parse_args()
 
-    files = [str(path) for path in (args.files or sorted(Path("nnue/data").glob("*.csv")))]
+    files = [str(path) for path in (args.files or sorted(Path("training/data").glob("*.csv")))]
     threshold = args.threshold
 
     total, draw_disagreements, decisive_disagreements = count_disagreements(

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Usage: scripts/pgo.sh <cargo-selector> <workload>
 #   grail:    scripts/pgo.sh "--bin grail" "./target/release/grail bench"
-#   generate: scripts/pgo.sh "-p training --bin generate" "./target/release/generate ..."
+#   datagen:  scripts/pgo.sh "-p training --bin datagen" "./target/release/datagen ..."
 
 CARGO_SELECTOR="$1"
 WORKLOAD="$2"

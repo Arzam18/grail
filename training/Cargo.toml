@@ -45,8 +45,8 @@ metal = [
 ]
 
 [[bin]]
-name = "generate"
-path = "src/bin/generate/main.rs"
+name = "datagen"
+path = "src/bin/datagen/main.rs"
 
 [[bin]]
 name = "train"

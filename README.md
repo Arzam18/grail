@@ -6,7 +6,7 @@
 
 Grail is a hobby chess engine written in Rust. It began as an attempt to make a chess engine and has since become an elaborate system for turning my sanity and electricity bill into Elo. It uses modern search techniques and a fully self-taught NNUE trained on 99 million self-play games. The name refers to the Holy Grail, which may still be easier to find than perfect chess.
 
-This repository hosts Grail's official releases and source code. The engine is developed entirely within this repository, which contains the self-play datagen, NNUE training pipeline, SPSA tuner, analysis tools, profiling, and build setup.
+This repository hosts Grail's official releases and source code. The engine is developed entirely within this repository, which contains the self-play datagen, NNUE training pipeline, SPSA tuner, profiling, and build setup.
 
 ## Usage
 
@@ -81,12 +81,11 @@ The project includes a `Makefile` for convenience:
 
 - **`make` or `make grail`**: Release build
 - **`make grail-pgo`**: Release build with PGO.
-- **`make generate`**: Builds the NNUE self-play datagen.
-- **`make generate-pgo`**: Builds the NNUE self-play datagen with PGO.
+- **`make datagen`**: Builds the NNUE self-play datagen.
+- **`make datagen-pgo`**: Builds the NNUE self-play datagen with PGO.
 - **`make train`**: Builds the NNUE trainer (auto-detects CUDA/Metal).
 - **`make tuner`**: Builds the SPSA tuner.
 - **`make tuner-pgo`**: Builds the SPSA tuner with PGO.
-- **`make nnue-analysis`**: Dumps a analysis of the current NNUE to `nnue/model.analysis.txt`.
 - **`make profile`**: Profiles the built-in benchmark with [`samply`](https://github.com/mstange/samply).
 - **`make clean`**: Remove the build directory.
 
@@ -99,13 +98,13 @@ Everything needed to generate self-play data and train Grail's NNUE lives in thi
 Build the generator and choose either an EPD opening book or random moves from startpos:
 
 ```bash
-make generate
+make datagen
 
 # Openings from an EPD opening book
-./target/release/generate book --path books/your_opening_book.epd
+./target/release/datagen book --path books/your_opening_book.epd
 
 # Openings from startpos + random moves
-./target/release/generate random --plies 8
+./target/release/datagen random --plies 8
 ```
 
 **Arguments:**
@@ -121,7 +120,7 @@ make generate
 - `--max-games`: Stop after this many games total.
 - `--dry-run`: Generate samples but don't write the dataset to disk.
 
-Generated data is saved to `nnue/data/YYYY-MM-DD-HH:MM.csv`.
+Generated data is saved to `training/data/YYYY-MM-DD-HH:MM.csv`.
 
 #### Training
 

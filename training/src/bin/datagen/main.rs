@@ -26,6 +26,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
+use training::paths::DATA_DIR;
 use utils::Book;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -67,10 +68,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    fs::create_dir_all("nnue/data")?;
+    fs::create_dir_all(DATA_DIR)?;
 
     let timestamp = Local::now().format("%Y-%m-%d-%H:%M");
-    let filename = format!("nnue/data/{}.csv", timestamp);
+    let filename = format!("{}/{}.csv", DATA_DIR, timestamp);
 
     log::info!("Writing samples to {}", filename);
     let mut file = File::create(&filename)?;
