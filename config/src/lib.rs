@@ -140,9 +140,9 @@ impl Default for EngineConfig {
             continuation_malus_multiplier: 10,
 
             ordering_quiet_check_bonus: 1000,
-            ordering_quiet_check_see_margin: 75,
-            ordering_bad_quiet_threshold: -150,
-            ordering_escape_divisor: 10,
+            ordering_quiet_check_see_margin: 35,
+            ordering_bad_quiet_threshold: -56,
+            ordering_escape_divisor: 4,
             ordering_unsafe_square_divisor: 20,
 
             lmr_divisor: 220,
@@ -189,7 +189,7 @@ impl Default for EngineConfig {
             razor_depth_coefficient: 293,
 
             qs_delta_margin: 200,
-            qs_delta_material_threshold: 1500,
+            qs_delta_material_threshold: 1634,
 
             iir_reduction: 1,
             iir_min_depth: 4,

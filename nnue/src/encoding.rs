@@ -1,4 +1,5 @@
 use cozy_chess::{BitBoard, Board, Color, File, Piece, Square};
+use utils::board_metrics::BoardMetrics;
 
 use crate::bitset;
 
@@ -30,7 +31,6 @@ pub const THEM_THREATS_START: usize = US_THREATS_END;
 pub const THEM_THREATS_END: usize = THEM_THREATS_START + Square::NUM;
 
 /// Encodes a board position into a dense f32 feature array from a perspective.
-/// Used during training where f32 tensors are required.
 pub fn encode_board(
     board: &Board,
     white_attacks: BitBoard,
@@ -98,7 +98,6 @@ pub fn encode_board(
 ///
 /// Bitset is faster than f32 for inference: XOR finds changed features instantly,
 /// and storage is 64x denser (64 bits per u64 vs one f32 per feature).
-/// Training still uses the f32 version above since tensors require floats.
 pub fn encode_board_bitset(
     board: &Board,
     white_attacks: BitBoard,
@@ -151,6 +150,32 @@ pub fn encode_board_bitset(
     bitset.set_u64(bitset.u64_index(THEM_THREATS_START), them_threats.0);
 
     bitset
+}
+
+/// Active feature indices for one perspective.
+pub type FeatureIndices = smallvec::SmallVec<[u32; 128]>;
+
+/// Encodes a list of indices of active features for one perspective.
+pub fn encode_board_indices(
+    board: &Board,
+    metrics: &BoardMetrics,
+    perspective: Color,
+) -> FeatureIndices {
+    let bitset = encode_board_bitset(
+        board,
+        metrics.attacks[Color::White as usize],
+        metrics.attacks[Color::Black as usize],
+        metrics.support[Color::White as usize],
+        metrics.support[Color::Black as usize],
+        metrics.threats[Color::White as usize],
+        metrics.threats[Color::Black as usize],
+        perspective,
+    );
+
+    let mut indices = FeatureIndices::new();
+    bitset.for_each_active(|index| indices.push(index as u32));
+
+    indices
 }
 
 /// King buckets divides the board into regions, and the king's location
@@ -221,6 +246,8 @@ mod tests {
         "rnbqkb1r/pp1p1ppp/4pn2/2p5/2PP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 0 4", // Sicilian
         "8/8/8/8/8/5k2/8/4K2R w - - 0 1",                           // Endgame
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", // Kiwipete
+        "q1q1k3/8/8/8/8/8/8/QQ2K3 w - - 0 1",                       // Promoted queens
+        "4k3/8/8/3q1p2/2P1N3/2N5/8/4K3 w - - 0 1",                  // Support, space, and threats
     ];
 
     #[test]
