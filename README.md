@@ -10,7 +10,7 @@ This repository hosts Grail's official releases and source code. The engine is d
 
 ## Usage
 
-Grail is a command-line UCI engine built for **Standard Chess**, so it requires a UCI-compatible chess GUI (such as Arena, BanksiaGUI, or Cutechess) to play.
+Grail is a command-line UCI engine for standard chess and Chess960 (Fischer Random). It requires a UCI-compatible chess GUI (such as Arena, BanksiaGUI, or Cutechess) to play.
 
 1. **Download**: Grab the zip for your OS from the [Releases](../../releases) page and extract it.
 2. **Install**: Open your chess GUI and add the right binary (see table below).
@@ -53,6 +53,7 @@ Once added to your GUI, you can configure Grail via the UCI options:
 - **Move Overhead**: Time buffer in milliseconds to account for communication lag (Default: 10).
 - **SyzygyPath**: Paths to Syzygy tablebase files (separated by `;` on Windows, `:` on Linux/macOS).
 - **SyzygyProbeDepth**: Minimum depth to probe tablebases (Default: 1).
+- **UCI_Chess960**: Enable Chess960 (Default: false).
 
 The engine supports standard time controls (increment, sudden death, moves to go) and analysis modes (fixed depth, fixed nodes, soft nodes, infinite).
 
@@ -95,20 +96,25 @@ Everything needed to generate self-play data and train Grail's NNUE lives in thi
 
 #### Data Generation
 
-Build the generator and choose either an EPD opening book or random moves from startpos:
+Build the generator. Games start from the standard startpos unless `--book` is given. `--random-plies` defaults to zero, but plays `N` or `N+1` random legal plies if set.
 
 ```bash
 make datagen
 
-# Openings from an EPD opening book
-./target/release/datagen book --path books/your_opening_book.epd
+# Generate from startpos + random moves
+./target/release/datagen --random-plies 8
 
-# Openings from startpos + random moves
-./target/release/datagen random --plies 8
+# Generate from openings from book
+./target/release/datagen --book books/your_opening_book.epd
+
+# Generate from book positions + random moves
+./target/release/datagen --book books/your_opening_book.epd --random-plies 8
 ```
 
 **Arguments:**
 
+- `--book`: Path to an EPD opening book. If omitted, games start from the standard startpos.
+- `--random-plies`: Random legal plies from the selected position (default: 0).
 - `--depth`: Search depth for each move (default: 8).
 - `--nodes`: Soft node limit for each move.
 - `--pv-lines`: Number of PV lines to search at each decision point (default: 1).
