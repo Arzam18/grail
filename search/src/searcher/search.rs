@@ -204,7 +204,7 @@ impl Searcher {
 
     /// Initializes state for a new search.
     fn init_search(&mut self) {
-        self.nodes = 0;
+        self.local_nodes = 0;
         self.max_ply_reached = 1;
         self.nmp_min_ply = 0;
 
@@ -293,7 +293,7 @@ impl Searcher {
                 .correction()
                 .adjust(node.board(), &prev_moves, static_eval);
 
-        // Prefer the TT score over static eval so trend sees what search already found.
+        // Prefer the TT score over correct static eval
         let stack_eval = tt_info
             .map(|tt| match tt.bound {
                 Bound::Exact => tt.value,
@@ -528,13 +528,13 @@ impl Searcher {
         move_index: i32,
         is_improving: bool,
         tt_move_is_capture: bool,
-        static_eval: i16,
+        corrected_eval: i16,
         extra_extension: i8,
         prev_moves: &PrevMoves,
     ) -> Option<(i16, bool, u8)> {
         let moved_color = node.board().side_to_move();
         let moved_piece = node.piece_on(m.from).unwrap();
-        let is_cap = node.is_capture(m);
+        let is_capture = node.is_capture(m);
         let is_promotion = m.promotion == Some(Piece::Queen);
         let is_pv_node = node.is_pv();
         let is_pv_move = move_index == 0;
@@ -543,25 +543,25 @@ impl Searcher {
             node,
             m,
             moved_piece,
-            is_cap,
+            is_capture,
             depth,
             in_check,
             is_pv_move,
             bounds.alpha,
-            static_eval,
+            corrected_eval,
         ) {
             return None;
         }
 
         let moved = PieceTo::new(moved_color, moved_piece, m.to);
-        let hist = if is_cap {
+        let hist = if is_capture {
             self.capture_history.get(node.board(), m)
         } else {
             self.history_heuristic.get(moved_color, m.from, m.to)
         };
         let cont_hist = self.continuation_history.get(prev_moves, moved);
 
-        if self.try_history_prune(depth, is_pv_move, is_cap, is_improving, hist, cont_hist) {
+        if self.try_history_prune(depth, is_pv_move, is_capture, is_improving, hist, cont_hist) {
             return None;
         }
 
@@ -571,7 +571,7 @@ impl Searcher {
         self.shared.tt().prefetch(child_hash);
 
         let gives_check = child.in_check();
-        let is_tactical = in_check || gives_check || is_cap || is_promotion;
+        let is_tactical = in_check || gives_check || is_capture || is_promotion;
 
         if self.try_futility_prune(
             depth,
@@ -579,7 +579,7 @@ impl Searcher {
             is_tactical,
             is_pv_move,
             bounds.alpha,
-            static_eval,
+            corrected_eval,
         ) {
             return None;
         }
@@ -589,7 +589,7 @@ impl Searcher {
             depth,
             is_pv_move,
             is_improving,
-            is_cap,
+            is_capture,
             is_promotion,
             move_index,
             node,
@@ -598,10 +598,10 @@ impl Searcher {
             cont_hist,
             tt_move_is_capture,
             bounds.alpha,
-            static_eval,
+            corrected_eval,
         );
 
-        let extension = self.get_extension(node, &m, moved_piece, is_cap);
+        let extension = self.get_extension(node, &m, moved_piece, is_capture);
         let extension = (extension + extra_extension).max(0) as u8;
 
         let mut adjusted_depth = depth.saturating_add(extension).saturating_sub(reduction);
@@ -661,7 +661,7 @@ impl Searcher {
             self.search_stack.pop();
         }
 
-        let is_quiet = !is_cap && !is_promotion;
+        let is_quiet = !is_capture && !is_promotion;
 
         Some((value, is_quiet, adjusted_depth))
     }

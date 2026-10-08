@@ -8,12 +8,8 @@ use crate::MAX_DEPTH;
 
 pub type PrevMoves = [Option<PieceTo>; MAX_CONTINUATION_LOOKBACK];
 
-/// Continuation history: scores moves based on the sequence of prior moves.
-/// Indexing: [lookback][prev: PieceTo][curr: PieceTo]
-///
-/// Tracks correlations like "after White's Nf3, playing Bc4 tends to be good."
-/// lookback 0 = opponent's last move, 1 = our previous move, etc.
-/// Helps with move ordering by learning common tactical/positional patterns.
+/// Continuation history. Indexed by [lookback][prev][curr].
+/// lookback 0 = opponent's last move, 1 = our previous move etc
 ///
 /// <https://www.chessprogramming.org/Countermove_Heuristic>
 #[derive(Clone)]

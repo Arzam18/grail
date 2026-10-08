@@ -38,16 +38,16 @@ pub enum EngineCommand {
 pub struct EngineWorker {
     engine: Engine,
     rx: Receiver<EngineCommand>,
-    output: Sender<UciOutput>,
+    uci_tx: Sender<UciOutput>,
     last_search: Option<SearchResultMeta>,
 }
 
 impl EngineWorker {
-    pub fn new(engine: Engine, rx: Receiver<EngineCommand>, output: Sender<UciOutput>) -> Self {
+    pub fn new(engine: Engine, rx: Receiver<EngineCommand>, uci_tx: Sender<UciOutput>) -> Self {
         Self {
             engine,
             rx,
-            output,
+            uci_tx,
             last_search: None,
         }
     }
@@ -58,7 +58,7 @@ impl EngineWorker {
             match cmd {
                 EngineCommand::Go(params) => {
                     let stm = self.engine.board().side_to_move();
-                    let result = self.engine.search(&params, Some(&self.output));
+                    let result = self.engine.search(&params, Some(&self.uci_tx));
 
                     // UCI requires bestmove for every "go" command, even in checkmate positions
                     let mut uci_move = NULL_MOVE.to_string();
@@ -74,7 +74,7 @@ impl EngineWorker {
                         }
                     }
 
-                    let _ = self.output.send(UciOutput::BestMove(uci_move));
+                    let _ = self.uci_tx.send(UciOutput::BestMove(uci_move));
                 }
                 EngineCommand::SetPosition { board, history } => {
                     self.last_search = None;

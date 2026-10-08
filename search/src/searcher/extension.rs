@@ -4,8 +4,6 @@ use utils::Node;
 use super::Searcher;
 
 impl Searcher {
-    /// Non-singular extensions: passed pawn pushes to 7th rank, etc.
-    /// Single entry point keeps the search loop lean.
     pub(super) fn get_extension(
         &self,
         node: &Node,

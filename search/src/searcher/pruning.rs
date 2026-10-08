@@ -8,12 +8,7 @@ use super::Searcher;
 
 const NEAR_MATE_VALUE: i16 = MATE_VALUE - 200;
 
-/// Mate distance pruning: adjusts alpha-beta bounds based on the maximum
-/// possible mate score at current ply. Returns true if the search can be pruned.
-///
-/// Example: A mate found at ply P is at least P plies from root, so:
-/// - Best possible score: MATE_VALUE - ply (mate-in-P)
-/// - Worst possible score: -(MATE_VALUE - ply) (mated-in-P)
+/// Mate distance pruning: nothing from here beats a mate in this many plies.
 ///
 /// <https://www.chessprogramming.org/Mate_Distance_Pruning>
 pub(super) fn mate_distance_prune(bounds: &mut Bounds, ply: u8) -> bool {
@@ -37,14 +32,14 @@ impl Searcher {
         is_tactical: bool,
         is_pv_move: bool,
         alpha: i16,
-        static_eval: i16,
+        corrected_eval: i16,
     ) -> bool {
         if is_pv_move || depth > self.config.futility_max_depth || in_check {
             return false;
         }
         let margin = self.config.futility_base_margin
             + depth.saturating_sub(1) as i16 * self.config.futility_depth_multiplier;
-        !is_tactical && static_eval + margin <= alpha
+        !is_tactical && corrected_eval + margin <= alpha
     }
 
     /// Razoring: if eval is far below alpha, drop into qsearch to verify and return early.
@@ -90,7 +85,7 @@ impl Searcher {
         in_check: bool,
         is_pv_move: bool,
         alpha: i16,
-        static_eval: i16,
+        corrected_eval: i16,
     ) -> bool {
         if is_pv_move || in_check || node.is_pv() || m.promotion.is_some() {
             return false;
@@ -117,7 +112,7 @@ impl Searcher {
 
             // When we're behind on eval we need captures to actually win material,
             // but tolerate more at higher depths since there's room to recover.
-            let eval_gap = alpha - static_eval;
+            let eval_gap = alpha - corrected_eval;
             let depth_margin = self.config.see_capture_depth_margin * (depth as i16);
             let threshold = -(eval_gap.max(0) + depth_margin);
 
@@ -135,7 +130,7 @@ impl Searcher {
         }
     }
 
-    /// Null move pruning: give opponent a free move; if we still beat beta, prune the subtree.
+    /// Null move pruning: give the opponent a free move and see if we still beat beta.
     ///
     /// <https://www.chessprogramming.org/Null_Move_Pruning>
     pub(super) fn try_null_move_prune(
@@ -273,10 +268,7 @@ impl Searcher {
         None
     }
 
-    /// Late move pruning: near the horizon, skip quiet moves beyond a count threshold.
-    /// As iterative deepening extends the horizon, nodes that were at the frontier open up
-    /// to search more moves. This forms a right-triangle search shape, narrow tip at the
-    /// current horizon, widening toward the root.
+    /// Late move pruning: skip quiets near the horizon once we've searched enough of them.
     ///
     /// <https://www.chessprogramming.org/Futility_Pruning#MoveCountBasedPruning>
     pub(super) fn should_lmp_prune(
@@ -288,10 +280,15 @@ impl Searcher {
         move_index: i32,
         is_improving: bool,
     ) -> bool {
-        let is_cap = node.is_capture(mv);
+        let is_capture = node.is_capture(mv);
         let is_promotion = mv.promotion == Some(Piece::Queen);
 
-        if in_check || node.is_pv() || is_cap || is_promotion || depth > self.config.lmp_max_depth {
+        if in_check
+            || node.is_pv()
+            || is_capture
+            || is_promotion
+            || depth > self.config.lmp_max_depth
+        {
             return false;
         }
 

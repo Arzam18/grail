@@ -71,10 +71,7 @@ pub fn encode_board(
     features
 }
 
-/// Encodes a board position into a packed bitset for inference.
-///
-/// Bitset is faster than f32 for inference: XOR finds changed features instantly,
-/// and storage is 64x denser (64 bits per u64 vs one f32 per feature).
+/// Encodes features into a packed bitset for inference.
 pub fn encode_board_bitset(
     board: &Board,
     white_support: BitBoard,

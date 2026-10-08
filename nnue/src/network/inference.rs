@@ -8,7 +8,7 @@ use super::accumulator::Accumulator;
 use super::linear::LinearLayer;
 use super::model::Network;
 use super::simd::{simd_add, simd_relu};
-use super::{CP_BOUND, EMBEDDING_SIZE, FV_SCALE, HIDDEN_SIZE, OUTPUT_BUCKETS};
+use super::{EMBEDDING_SIZE, EVAL_OUTPUT_BOUND, FV_SCALE, HIDDEN_SIZE, OUTPUT_BUCKETS};
 
 /// NNUE inference engine with quantized weights and dual-perspective accumulators.
 pub struct NNUENetwork {
@@ -64,7 +64,7 @@ impl NNUENetwork {
 
         let output = self.buckets[bucket].forward(&self.embedding_buffer);
 
-        (output * FV_SCALE).clamp(-CP_BOUND as f32, CP_BOUND as f32)
+        (output * FV_SCALE).clamp(-EVAL_OUTPUT_BOUND as f32, EVAL_OUTPUT_BOUND as f32)
     }
 }
 

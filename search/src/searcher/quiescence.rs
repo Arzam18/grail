@@ -62,8 +62,6 @@ impl Searcher {
             }
         }
 
-        // Reuse the cached NNUE result from the TT when available; the corrected
-        // value is derived freshly so the cache stays semantically "raw eval".
         let static_eval = tt_info
             .and_then(|t| t.static_eval)
             .unwrap_or_else(|| self.static_eval(node));
@@ -146,7 +144,7 @@ impl Searcher {
                         continue;
                     }
                 } else {
-                    // Not a capture (should not happen with mask, but skip for safety)
+                    // Not a capture (should not happen with mask, but skip just in case)
                     continue;
                 }
             }

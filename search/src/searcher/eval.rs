@@ -18,7 +18,7 @@ impl Searcher {
     /// Based on Stockfish's approach: VALUE_DRAW - 1 + (nodes & 0x2)
     /// Returns -1 or +1 to break symmetry and prevent repetitive play.
     pub(super) fn draw_value(&self) -> i16 {
-        -1 + (self.nodes & 0x2) as i16
+        -1 + (self.local_nodes & 0x2) as i16
     }
 
     /// Check if the position is a forced draw (fifty-move rule or repetition).
