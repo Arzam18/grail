@@ -8,9 +8,11 @@ use crate::{
 };
 use candle_core::{DType, Device};
 
-/// NNUE evaluator for inference. The full-precision network field is kept
-/// around because candle's VarMap wants to register tensors before weights are
-/// loaded; enable_nnue then quantizes it into the nnue field for actual eval.
+/// NNUE evaluator for inference.
+///
+/// The full-precision network field is kept around because candle's
+/// VarMap wants to register tensors before weights are loaded.
+/// Run enable_nnue() to quantize it into the nnue field for actual eval.
 pub struct Evaluator {
     /// Quantized network for fast inference
     nnue: Option<NNUENetwork>,

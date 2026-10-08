@@ -24,7 +24,7 @@ pub struct Grail {
     config: EngineConfig,
     stop: Arc<AtomicBool>,
     cmd_tx: Sender<EngineCommand>,
-    output: Sender<UciOutput>,
+    uci_tx: Sender<UciOutput>,
     worker_handle: JoinHandle<()>,
 }
 
@@ -35,19 +35,19 @@ impl Grail {
         let (cmd_tx, cmd_rx) = mpsc::channel();
 
         let uci = UciConnection::new();
-        let output = uci.output_sender();
+        let uci_tx = uci.output_sender();
 
         let config = EngineConfig::default();
         let engine = create_engine(&config, Arc::clone(&stop));
 
-        let worker = EngineWorker::new(engine, cmd_rx, output.clone());
+        let worker = EngineWorker::new(engine, cmd_rx, uci_tx.clone());
         let worker_handle = thread::spawn(move || worker.run());
 
         Self {
             config,
             stop,
             cmd_tx,
-            output,
+            uci_tx,
             worker_handle,
         }
     }
@@ -80,66 +80,59 @@ impl Grail {
     fn handle(&mut self, input: UciInput) -> bool {
         match input {
             UciInput::Uci => {
-                let _ = self.output.send(UciOutput::IdName(format!(
+                self.send_uci_output(UciOutput::IdName(format!(
                     "{} {}",
                     ENGINE_NAME, ENGINE_VERSION
                 )));
-                let _ = self
-                    .output
-                    .send(UciOutput::IdAuthor(ENGINE_AUTHOR.to_string()));
+                self.send_uci_output(UciOutput::IdAuthor(ENGINE_AUTHOR.to_string()));
                 for option in list_uci_options(&self.config) {
-                    let _ = self.output.send(UciOutput::Option(option));
+                    self.send_uci_output(UciOutput::Option(option));
                 }
-                let _ = self.output.send(UciOutput::UciOk);
+                self.send_uci_output(UciOutput::UciOk);
             }
-            UciInput::IsReady => {
-                let _ = self.output.send(UciOutput::ReadyOk);
-            }
+            UciInput::IsReady => self.send_uci_output(UciOutput::ReadyOk),
             // TODO: Implement debug mode: send extra info via "info string" when enabled
             UciInput::Debug(_enabled) => {}
             UciInput::SetOption { name, value } => {
-                if let Err(e) = set_uci_option(&mut self.config, &name, &value) {
-                    let _ = self.output.send(UciOutput::InfoString(e));
-                } else {
-                    let _ = self
-                        .cmd_tx
-                        .send(EngineCommand::Configure(Box::new(self.config.clone())));
+                match set_uci_option(&mut self.config, &name, &value) {
+                    Ok(()) => self.send_engine_command(EngineCommand::Configure(Box::new(
+                        self.config.clone(),
+                    ))),
+                    Err(error) => self.send_uci_output(UciOutput::InfoString(error)),
                 }
             }
-            UciInput::UciNewGame => {
-                let _ = self.cmd_tx.send(EngineCommand::NewGame);
-            }
+            UciInput::UciNewGame => self.send_engine_command(EngineCommand::NewGame),
             UciInput::Position {
                 board,
                 game_history,
-            } => {
-                let _ = self.cmd_tx.send(EngineCommand::SetPosition {
-                    board,
-                    history: game_history,
-                });
-            }
+            } => self.send_engine_command(EngineCommand::SetPosition {
+                board,
+                history: game_history,
+            }),
             UciInput::Go(params) => {
                 self.stop.store(false, Ordering::Relaxed);
-                let _ = self.cmd_tx.send(EngineCommand::Go(params));
+                self.send_engine_command(EngineCommand::Go(params));
             }
-            UciInput::Stop => {
-                self.stop.store(true, Ordering::Relaxed);
-            }
-            UciInput::Display => {
-                let _ = self.cmd_tx.send(EngineCommand::Display);
-            }
-            UciInput::Bench => {
-                let _ = self.cmd_tx.send(EngineCommand::Bench);
-            }
+            UciInput::Stop => self.stop.store(true, Ordering::Relaxed),
+            UciInput::Display => self.send_engine_command(EngineCommand::Display),
+            UciInput::Bench => self.send_engine_command(EngineCommand::Bench),
             UciInput::Quit => return false,
             UciInput::Unknown(_) => {} // Ignore unknown commands per UCI spec
         }
         true
     }
 
+    fn send_uci_output(&self, output: UciOutput) {
+        let _ = self.uci_tx.send(output);
+    }
+
+    fn send_engine_command(&self, command: EngineCommand) {
+        let _ = self.cmd_tx.send(command);
+    }
+
     fn shutdown(self) {
         self.stop.store(true, Ordering::Relaxed);
-        let _ = self.cmd_tx.send(EngineCommand::Quit);
+        self.send_engine_command(EngineCommand::Quit);
         let _ = self.worker_handle.join();
     }
 }

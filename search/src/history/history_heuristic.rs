@@ -8,7 +8,7 @@ use crate::MAX_DEPTH;
 const HISTORY_SIZE: usize = Color::NUM * Square::NUM * Square::NUM;
 
 /// Scores quiet moves based on search success. Indexed by [color][from][to].
-/// Moves causing beta cutoffs get bonuses; moves searched before a cutoff get malus.
+/// Moves causing beta cutoffs get bonuses and moves searched before it get malus.
 ///
 /// <https://www.chessprogramming.org/History_Heuristic>
 #[derive(Clone)]

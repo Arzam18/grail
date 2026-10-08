@@ -137,7 +137,7 @@ impl Default for EngineConfig {
             capture_history_malus_multiplier: 2,
 
             continuation_max_value: 512,
-            continuation_max_moves: 4,
+            continuation_max_moves: MAX_CONTINUATION_LOOKBACK,
             continuation_bonus_multiplier: 9,
             continuation_malus_multiplier: 10,
 

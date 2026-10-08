@@ -16,7 +16,7 @@ pub const EMBEDDING_SIZE: usize = 768;
 pub const HIDDEN_SIZE: usize = 16;
 
 /// Evaluation clipping bound (centipawns). Output is clamped to [-CP_BOUND, CP_BOUND].
-pub const CP_BOUND: i16 = 5000;
+pub const EVAL_OUTPUT_BOUND: i16 = 5000;
 
 /// Scale factor for network I/O.
 /// Training targets are divided by this, inference output is multiplied back.
@@ -24,7 +24,7 @@ pub const CP_BOUND: i16 = 5000;
 pub const FV_SCALE: f32 = 400.0;
 
 /// Percentile of weights to use for quantization scaling.
-/// This ensures that most weights are in a reasonable range,
+/// This ensures that most weights are in a reasonable range
 /// and that extreme outliers don't stretch the range and waste precision.
 /// 99.9% proved a good value during testing.
 pub const QUANTIZATION_PERCENTILE: f32 = 0.999;

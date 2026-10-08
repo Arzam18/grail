@@ -1,9 +1,3 @@
-//! Time budget management for chess search.
-//!
-//! Uses a two-tier system:
-//! - **target**: soft limit, aim to stop here (can be adjusted during search)
-//! - **hard**: absolute maximum, never exceed
-
 use cozy_chess::{Board, Color};
 
 use uci::commands::GoParams;
@@ -11,9 +5,6 @@ use utils::only_move;
 
 use super::stats::{MIN_DEPTH_FOR_ADJUSTMENTS, TimeControlStats};
 
-// Time management constants
-// Estimated moves remaining - intentionally conservative since the target
-// often gets reduced when the best move is stable (see adjust_for_search_behavior)
 const MOVE_MARGIN_START: u64 = 20;
 const MOVE_MARGIN_END: u64 = 10;
 const INCREMENT_USAGE: f64 = 0.8;

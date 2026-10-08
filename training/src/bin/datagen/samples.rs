@@ -1,5 +1,5 @@
 use cozy_chess::{Color, Move};
-use nnue::network::CP_BOUND;
+use nnue::network::EVAL_OUTPUT_BOUND;
 use std::fmt;
 use std::io::{self, Write};
 
@@ -45,7 +45,7 @@ pub fn write_samples<W: Write>(writer: &mut W, samples: &[Sample]) -> io::Result
             writer,
             "{},{},{},{},{}",
             s.fen,
-            s.score.clamp(-CP_BOUND, CP_BOUND),
+            s.score.clamp(-EVAL_OUTPUT_BOUND, EVAL_OUTPUT_BOUND),
             s.best_move,
             s.outcome,
             s.game_id,

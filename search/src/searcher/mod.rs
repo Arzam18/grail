@@ -47,19 +47,20 @@ pub struct Searcher {
 
     /// The position we are finding the best move for (root position)
     board: Board,
-    /// Position hashes for repetition detection - all positions up until the search.
+
+    /// Position hashes for repetition detection (all positions in the game so far)
     game_history: AHashSet<u64>,
 
-    /// Number of nodes searched
-    nodes: u64,
+    /// Local count. Flushed onto the shared total every NODE_SYNC_INTERVAL.
+    local_nodes: u64,
 
-    /// Selective depth (max ply reached including quiescence - deepest we have gotten)
+    /// Selective/deepest depth (including QS)
     max_ply_reached: u8,
 
     /// Current iterative deepening depth
     root_depth: u8,
 
-    /// Tracks active search path - used for repetition, improving, etc.
+    /// Tracks the active search path (used for repetition, improving, etc)
     search_stack: SearchStack,
 
     /// Scores quiet moves by search success
@@ -78,8 +79,7 @@ pub struct Searcher {
     /// Hard time deadline for the search (main searcher).
     deadline: Option<Instant>,
 
-    /// Hard node-count limit for the search. When the cumulative node count
-    /// (across all threads) reaches this, the search is stopped.
+    /// Hard node limit (all searchers combined)
     node_limit: Option<u64>,
 
     /// Disable NMP until this ply.
@@ -108,7 +108,7 @@ impl Searcher {
 
             board: Board::default(),
             game_history: AHashSet::new(),
-            nodes: 0,
+            local_nodes: 0,
             max_ply_reached: 1,
             root_depth: 0,
 
@@ -159,22 +159,22 @@ impl Searcher {
     }
 
     pub fn sync_nodes(&mut self) {
-        if self.nodes > 0 {
-            self.shared.add_nodes(self.nodes);
-            self.nodes = 0;
+        if self.local_nodes > 0 {
+            self.shared.add_nodes(self.local_nodes);
+            self.local_nodes = 0;
         }
     }
 
     fn increment_nodes(&mut self) {
-        self.nodes += 1;
-        if self.nodes >= Self::NODE_SYNC_INTERVAL {
+        self.local_nodes += 1;
+        if self.local_nodes >= Self::NODE_SYNC_INTERVAL {
             self.sync_nodes();
             self.check_limits();
         }
     }
 
     fn searched_nodes(&self) -> u64 {
-        self.shared.total_nodes() + self.nodes
+        self.shared.total_nodes() + self.local_nodes
     }
 
     /// Checks if any hard search limit has been reached (time deadline or
