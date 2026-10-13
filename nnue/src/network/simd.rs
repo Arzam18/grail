@@ -6,6 +6,17 @@ pub type SimdI16 = i16x32;
 pub const SIMD_WIDTH_F32: usize = 16;
 pub const SIMD_WIDTH_I16: usize = 32;
 
+// Different architectures can keep a different number of SIMD vectors in registers at once.
+// Needed because stuff like dot products can then load the large input vector once per batch instead of once per row (which is expensive).
+// Tuned (ish).
+pub const SIMD_BATCH_SIZE: usize = if cfg!(target_feature = "avx512f") {
+    16
+} else if cfg!(any(target_feature = "avx2", target_feature = "neon")) {
+    4
+} else {
+    2
+};
+
 pub fn simd_relu(values: &mut [f32]) {
     let len = values.len();
     let mut i = 0;
@@ -38,7 +49,9 @@ pub fn simd_add(dest: &mut [f32], src: &[f32]) {
     }
 }
 
-pub fn dot_product(a: &[f32], b: &[f32], len: usize) -> f32 {
+pub fn simd_dot_product(a: &[f32], b: &[f32]) -> f32 {
+    let len = a.len();
+
     let mut sum_vec = SimdF32::splat(0.0);
     let mut i = 0;
 
@@ -55,4 +68,26 @@ pub fn dot_product(a: &[f32], b: &[f32], len: usize) -> f32 {
     }
 
     sum
+}
+
+pub fn simd_dot_product_batched<const N: usize>(input: &[f32], rows: [&[f32]; N]) -> [f32; N] {
+    let len = input.len();
+    let (input, tail) = input.as_chunks::<SIMD_WIDTH_F32>();
+    let rows = rows.map(|row| row[..len].as_chunks::<SIMD_WIDTH_F32>());
+    let mut sums = [SimdF32::splat(0.0); N];
+
+    for (i, chunk) in input.iter().enumerate() {
+        let x = SimdF32::new(*chunk);
+        for (sum, (weights, _)) in sums.iter_mut().zip(&rows) {
+            *sum += x * SimdF32::new(weights[i]);
+        }
+    }
+
+    let mut dots = sums.map(|sum| sum.reduce_add());
+    for (dot, (_, weights)) in dots.iter_mut().zip(&rows) {
+        for j in 0..tail.len() {
+            *dot += tail[j] * weights[j];
+        }
+    }
+    dots
 }

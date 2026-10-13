@@ -1,7 +1,7 @@
 use candle_core::Result;
 use candle_nn::Linear;
 
-use super::simd::dot_product;
+use super::simd::{SIMD_BATCH_SIZE, simd_dot_product, simd_dot_product_batched};
 
 /// Linear layer optimized for CPU inference.
 ///
@@ -35,13 +35,25 @@ impl LinearLayer {
     }
 
     pub fn forward(&self, input: &[f32], output: &mut [f32]) {
+        // Let's batch the neurons so we don't have to reload the input for each and every one of them.
         output.copy_from_slice(&self.biases);
 
-        for &i in self.active_outputs.iter() {
-            let offset = i * self.input_size;
-            let weights_row = &self.weights[offset..offset + self.input_size];
-            output[i] += dot_product(input, weights_row, self.input_size);
+        let (batches, rest) = self.active_outputs.as_chunks::<SIMD_BATCH_SIZE>();
+        for &indices in batches {
+            let rows = indices.map(|index| self.weight_row(index));
+            let dots = simd_dot_product_batched(input, rows);
+            for i in 0..indices.len() {
+                output[indices[i]] += dots[i];
+            }
         }
+        for &i in rest {
+            output[i] += simd_dot_product(input, self.weight_row(i));
+        }
+    }
+
+    fn weight_row(&self, index: usize) -> &[f32] {
+        let offset = index * self.input_size;
+        &self.weights[offset..offset + self.input_size]
     }
 }
 
