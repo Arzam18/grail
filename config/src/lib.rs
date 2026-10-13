@@ -177,7 +177,7 @@ impl Default for EngineConfig {
             lmp_depth_multiplier: 2,
             lmp_improving_reduction: 85,
 
-            futility_max_depth: 4,
+            futility_max_depth: 10,
             futility_base_margin: 150,
             futility_depth_multiplier: 100,
 

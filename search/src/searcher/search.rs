@@ -573,17 +573,6 @@ impl Searcher {
         let gives_check = child.in_check();
         let is_tactical = in_check || gives_check || is_capture || is_promotion;
 
-        if self.try_futility_prune(
-            depth,
-            in_check,
-            is_tactical,
-            is_pv_move,
-            bounds.alpha,
-            corrected_eval,
-        ) {
-            return None;
-        }
-
         let reduction = self.get_reduction(
             ply,
             depth,
@@ -605,6 +594,17 @@ impl Searcher {
         let extension = (extension + extra_extension).max(0) as u8;
 
         let mut adjusted_depth = depth.saturating_add(extension).saturating_sub(reduction);
+
+        if self.try_futility_prune(
+            adjusted_depth,
+            in_check,
+            is_tactical,
+            is_pv_move,
+            bounds.alpha,
+            corrected_eval,
+        ) {
+            return None;
+        }
 
         let child_bounds = if is_pv_move {
             bounds.invert()
