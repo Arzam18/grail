@@ -47,24 +47,23 @@ impl Engine {
         let old_config = self.config.clone();
         self.config = config.clone();
 
-        if init || old_config.hash_size.value != config.hash_size.value {
-            *self.shared.tt() = TranspositionTable::new(config.hash_size.value as usize);
+        if init || old_config.hash_size != config.hash_size {
+            *self.shared.tt() = TranspositionTable::new(config.hash_size as usize);
         }
 
         if init || !self.shared.correction().matches_config(config) {
             self.shared.correction().configure(config);
         }
 
-        if init || old_config.syzygy_path.value != config.syzygy_path.value {
-            if config.syzygy_path.value.is_empty() {
+        if init || old_config.syzygy_path != config.syzygy_path {
+            if config.syzygy_path.is_empty() {
                 self.shared.clear_tablebases();
             } else {
-                self.shared.init_tablebases(&config.syzygy_path.value);
+                self.shared.init_tablebases(&config.syzygy_path);
             }
         }
 
-        let new_num_threads = config.threads.value;
-        while self.searchers.len() < new_num_threads {
+        while self.searchers.len() < config.threads {
             let thread_id = self.searchers.len();
             let evaluator = (self.create_evaluator)();
             self.searchers.push(Searcher::new(
@@ -74,7 +73,7 @@ impl Engine {
                 evaluator,
             ));
         }
-        self.searchers.truncate(new_num_threads);
+        self.searchers.truncate(config.threads);
 
         for searcher in &mut self.searchers {
             searcher.configure(config);
@@ -96,6 +95,10 @@ impl Engine {
 
     pub fn board(&self) -> &Board {
         &self.board
+    }
+
+    pub fn config(&self) -> &EngineConfig {
+        &self.config
     }
 
     pub fn set_tablebases(&self, tb: TableBases<CozyAdapter>) {

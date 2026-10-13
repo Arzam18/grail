@@ -2,7 +2,7 @@ use arrayvec::ArrayVec;
 use cozy_chess::{BitBoard, Move, Piece};
 use utils::{PAWN_VALUE, captured_piece, gives_check, piece_value};
 
-use crate::history::{CaptureHistory, ContinuationHistory, HistoryHeuristic, PieceTo};
+use crate::history::{CaptureHistory, ContinuationHistory, HistoryHeuristic, PieceTo, PrevMoves};
 use crate::utils::see::see;
 use utils::Node;
 
@@ -22,14 +22,7 @@ enum Phase {
     BadQuiets,
 }
 
-/// Staged move generator for main search. Based on Black Marlin.
-///
-/// Generates and sorts moves lazily in phases to avoid doing it all upfront:
-/// 1. BestMove (TT/PV move) - most likely to cause cutoff
-/// 2. GoodCaptures - winning/equal captures by SEE (includes capture promotions)
-/// 3. GoodQuiets - quiet moves with good score (queen promos first)
-/// 4. BadCaptures - losing captures, tried late
-/// 5. BadQuiets - quiet moves with bad score (underpromos last)
+/// Phased move generator for main search. Based on Black Marlin.
 ///
 /// <https://www.chessprogramming.org/Move_Ordering>
 /// <https://github.com/jnlt3/blackmarlin>
@@ -38,8 +31,8 @@ pub struct MainMoveGenerator {
 
     best_move: Option<Move>,
 
-    // Continuation history context
-    prev_moves: Vec<Option<PieceTo>>,
+    // For cont history
+    prev_moves: PrevMoves,
 
     good_captures: ArrayVec<ScoredMove, MAX_CAPTURES>,
     bad_captures: ArrayVec<ScoredMove, MAX_CAPTURES>,
@@ -59,7 +52,7 @@ impl MainMoveGenerator {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         best_move: Option<Move>,
-        prev_moves: Vec<Option<PieceTo>>,
+        prev_moves: PrevMoves,
         quiet_check_bonus: i16,
         quiet_check_see_margin: i16,
         bad_quiet_threshold: i16,
@@ -148,12 +141,11 @@ impl MainMoveGenerator {
                 let victim_value = piece_value(victim);
                 let attacker_value = piece_value(attacker);
 
-                // If victim is more valuable than attacker, it's likely good - skip SEE
+                // If victim is more valuable than attacker, it's likely good (skip SEE)
                 if victim_value > attacker_value {
                     return Some(scored_move.mov);
                 }
 
-                // Only run expensive SEE if capture seems questionable
                 if !see(board, scored_move.mov, 0) {
                     self.bad_captures.push(scored_move);
                     continue;

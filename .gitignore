@@ -5,6 +5,10 @@ target/
 # Rustfmt backup files
 **/*.rs.bk
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+
 # MSVC debug info
 *.pdb
 
@@ -15,9 +19,13 @@ target/
 sprt/
 
 # NNUE training data and progress
-nnue/data/
+training/data/
+
+# SPSA
+tuning/params.toml
+tuning/plot.png
 
 # Profiling
-flamegraph.svg
+profile.json.gz
 
 config.json

@@ -8,9 +8,11 @@ use crate::{
 };
 use candle_core::{DType, Device};
 
-/// NNUE evaluator for inference. The full-precision network field is kept
-/// around because candle's VarMap wants to register tensors before weights are
-/// loaded; enable_nnue then quantizes it into the nnue field for actual eval.
+/// NNUE evaluator for inference.
+///
+/// The full-precision network field is kept around because candle's
+/// VarMap wants to register tensors before weights are loaded.
+/// Run enable_nnue() to quantize it into the nnue field for actual eval.
 pub struct Evaluator {
     /// Quantized network for fast inference
     nnue: Option<NNUENetwork>,
@@ -39,8 +41,6 @@ impl Evaluator {
         let board = node.board();
         let stm = board.side_to_move();
 
-        let white_attacks = node.attacks_for(Color::White);
-        let black_attacks = node.attacks_for(Color::Black);
         let white_support = node.support_for(Color::White);
         let black_support = node.support_for(Color::Black);
         let white_threats = node.threats_for(Color::White);
@@ -48,8 +48,6 @@ impl Evaluator {
 
         let white_bits = encode_board_bitset(
             board,
-            white_attacks,
-            black_attacks,
             white_support,
             black_support,
             white_threats,
@@ -58,8 +56,6 @@ impl Evaluator {
         );
         let black_bits = encode_board_bitset(
             board,
-            white_attacks,
-            black_attacks,
             white_support,
             black_support,
             white_threats,

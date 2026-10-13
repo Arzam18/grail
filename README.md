@@ -1,30 +1,31 @@
 # Grail
 
-[![CCRL 40/15](https://img.shields.io/badge/CCRL%2040%2F15-3378%20Elo-%23DAA520.svg)](https://computerchess.org.uk/ccrl/4040/cgi/compare_engines.cgi?family=Grail&print=Rating+list)
+[![CCRL 40/15](https://img.shields.io/badge/CCRL%2040%2F15-3394%20Elo-%23DAA520.svg)](https://computerchess.org.uk/ccrl/4040/cgi/compare_engines.cgi?family=Grail&print=Rating+list)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-nightly-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
 
-Grail is a hobby chess engine written in Rust. Named after the quest for the Holy Grail, it represents the search for the elusive, perfectly solved game. It implements modern search techniques and a fully self-taught NNUE that learned chess from 99 million self-play games.
+Grail is a hobby chess engine written in Rust. It began as an attempt to make a chess engine and has since become an elaborate system for turning my sanity and electricity bill into Elo. It uses modern search techniques and a fully self-taught NNUE trained on 99 million self-play games. The name refers to the Holy Grail, which may still be easier to find than perfect chess.
+
+This repository hosts Grail's official releases and source code. The engine is developed entirely within this repository, which contains the self-play datagen, NNUE training pipeline, SPSA tuner, profiling, and build setup.
 
 ## Usage
 
-Grail is a command-line engine designed for **Standard Chess**. It requires a UCI-compatible chess GUI (such as Arena, BanksiaGUI, or Cutechess) to play.
-
-### Getting Started
+Grail is a command-line UCI engine for standard chess and Chess960 (Fischer Random). It requires a UCI-compatible chess GUI (such as Arena, BanksiaGUI, or Cutechess) to play.
 
 1. **Download**: Grab the zip for your OS from the [Releases](../../releases) page and extract it.
 2. **Install**: Open your chess GUI and add the right binary (see table below).
-3. **Play**: Start a game or analysis session!
+3. **Play**: Start a game or analysis session.
 
-#### Which binary should I use?
+### Which binary should I use?
 
-Each release includes builds optimized for different CPU architectures:
+Each release includes builds for a few different CPU architectures:
 
-| OS                  | Binary      | Supported CPUs                                        |
-| ------------------- | ----------- | ----------------------------------------------------- |
-| **Linux / Windows** | `x86-64-v4` | Intel Skylake-X/Ice Lake+ (2017+), AMD Zen 4+ (2022+) |
-| **Linux / Windows** | `x86-64-v3` | Intel Haswell+ (2013+), AMD Zen 2+ (2019+)            |
-| **macOS**           | `arm64`     | Apple Silicon (M1/M2/M3/M4)                           |
+| OS                      | Binary      | CPU compatibility                                     |
+| ----------------------- | ----------- | ----------------------------------------------------- |
+| **Linux / Windows**     | `x86-64-v4` | Intel Skylake-X/Ice Lake+ (2017+), AMD Zen 4+ (2022+) |
+| **Linux / Windows**     | `x86-64-v3` | Intel Haswell+ (2013+), AMD Zen 2+ (2019+)            |
+| **Linux ARM / Android** | `aarch64`   | Any 64-bit ARM CPU                                    |
+| **macOS**               | `arm64`     | Apple Silicon (M1/M2/M3/M4)                           |
 
 <!-- prettier-ignore -->
 > [!TIP]
@@ -32,7 +33,7 @@ Each release includes builds optimized for different CPU architectures:
 >
 > For technical details, see [x86-64 Microarchitecture Levels](https://en.wikipedia.org/wiki/X86-64#Microarchitecture_levels).
 
-#### A note for macOS users
+### A note for macOS users
 
 macOS blocks unsigned binaries by default. Apple wants me to pay $99/year to sign the binary so you can avoid typing this command. So instead, after downloading, just run:
 
@@ -44,16 +45,17 @@ and you should be able to run it! 🍎
 
 ### Configuration
 
-Once added to your GUI, you can configure the engine via the UCI options:
+Once added to your GUI, you can configure Grail via the UCI options:
 
-- **Hash**: Size of the transposition table in MB (Default: 256).
+- **Hash**: Size of the transposition table in MB (Default: 16).
 - **Threads**: Number of search threads (Default: 1).
 - **MultiPV**: Number of principal variations to search (Default: 1).
 - **Move Overhead**: Time buffer in milliseconds to account for communication lag (Default: 10).
 - **SyzygyPath**: Paths to Syzygy tablebase files (separated by `;` on Windows, `:` on Linux/macOS).
 - **SyzygyProbeDepth**: Minimum depth to probe tablebases (Default: 1).
+- **UCI_Chess960**: Enable Chess960 (Default: false).
 
-The engine supports standard time controls (increment, sudden death, moves to go) and analysis modes (fixed depth, infinite).
+The engine supports standard time controls (increment, sudden death, moves to go) and analysis modes (fixed depth, fixed nodes, soft nodes, infinite).
 
 ## Play Against Grail Online
 
@@ -63,69 +65,86 @@ You can challenge the latest version of Grail on [Lichess](https://lichess.org/@
 
 ### Building from Source
 
-**Prerequisites:** Rust nightly toolchain (Grail uses `portable_simd` and `generic_const_exprs`).
-
-**Quick Start:**
+Grail is built on [Rust](https://www.rust-lang.org/tools/install), so make sure you have it installed.
 
 ```bash
 git clone https://github.com/jorgenhanssen/grail.git
 cd grail
-rustup override set nightly
+
 make grail
 ```
 
-This builds the release binary at `target/release/grail`.
+The resulting release binary is written to `target/release/grail`.
 
 ### Build Targets
 
 The project includes a `Makefile` for convenience:
 
-- **`make grail`** (default): Builds the release binary.
-- **`make tunable`**: Builds with exposed parameters for SPSA tuning.
-- **`make generate`**: Builds the data generation tool for NNUE training.
+- **`make` or `make grail`**: Release build
+- **`make grail-pgo`**: Release build with PGO.
+- **`make datagen`**: Builds the NNUE self-play datagen.
+- **`make datagen-pgo`**: Builds the NNUE self-play datagen with PGO.
 - **`make train`**: Builds the NNUE trainer (auto-detects CUDA/Metal).
-- **`make nnue-analysis`**: Dumps a human-readable weight analysis of the current NNUE to `nnue/model.analysis.txt`.
-- **`make clean`**: Cleans the build directory.
+- **`make tuner`**: Builds the SPSA tuner.
+- **`make tuner-pgo`**: Builds the SPSA tuner with PGO.
+- **`make profile`**: Profiles the built-in benchmark with [`samply`](https://github.com/mstange/samply).
+- **`make clean`**: Remove the build directory.
 
 ### NNUE Data Generation & Training
 
-Grail includes tools to generate training data and train its own NNUE networks.
+Everything needed to generate self-play data and train Grail's NNUE lives in this repository.
 
 #### Data Generation
 
-Generate self-play games to create a dataset:
+Build the generator. Games start from the standard startpos unless `--book` is given. `--random-plies` defaults to zero, but plays `N` or `N+1` random legal plies if set.
 
 ```bash
-make generate
-./target/release/generate --book books/your_opening_book.epd
+make datagen
+
+# Generate from startpos + random moves
+./target/release/datagen --random-plies 8
+
+# Generate from openings from book
+./target/release/datagen --book books/your_opening_book.epd
+
+# Generate from book positions + random moves
+./target/release/datagen --book books/your_opening_book.epd --random-plies 8
 ```
 
 **Arguments:**
 
-- `--book`: Path to an opening book in EPD format (required).
+- `--book`: Path to an EPD opening book. If omitted, games start from the standard startpos.
+- `--random-plies`: Random legal plies from the selected position (default: 0).
 - `--depth`: Search depth for each move (default: 8).
+- `--nodes`: Soft node limit for each move.
 - `--pv-lines`: Number of PV lines to search at each decision point (default: 1).
 - `--threads`: Number of threads (default: number of logical CPUs).
-- `--syzygy-path`: Colon-separated paths to Syzygy tablebase files (optional).
+- `--syzygy-path`: Paths to Syzygy tablebase files.
+- `--max-opening-imbalance`: Discard games whose opening eval exceeds this many centipawns in absolute value.
+- `--max-teleport-plies`: Max plies to teleport along a PV between recorded positions (default: 8).
+- `--max-game-plies`: Discard games lasting longer than this many moves (default: 300).
+- `--max-games`: Stop after this many games total.
+- `--dry-run`: Generate samples but don't write the dataset to disk.
 
-Generated data is saved to `nnue/data/YYYY-MM-DD-HH:MM.csv`.
+Generated data is saved to `training/data/YYYY-MM-DD-HH:MM.csv`.
 
 #### Training
 
 Train a new network using the generated data:
 
 ```bash
-make train  # Auto-detects GPU support (CUDA/Metal)
+make train
+
 ./target/release/train
 ```
 
-Run it again later and it'll pick up where it left off. Pass `--restart` to start fresh.
+Run it again later and it'll pick up where it left off. Pass `--restart` to start from scratch.
 
 **Arguments:**
 
 - `--batch-size`: Batch size for training (default: 8192).
 - `--learning-rate`: Initial learning rate (default: 0.001).
-- `--epochs`: Number of epochs to train (default: 200).
+- `--epochs`: Max number of epochs to train (default: 200).
 - `--workers`: Number of worker threads for data loading (default: 4).
 - `--val-ratio`: Fraction of data to use for validation (default: 0.05).
 - `--test-ratio`: Fraction of data to use for testing (default: 0.01).
@@ -136,9 +155,41 @@ Run it again later and it'll pick up where it left off. Pass `--restart` to star
 - `--draw-target`: Target win-probability for drawn games, smaller = prefer wins over draws (default: 0.5).
 - `--restart`: Discard saved progress and train from epoch 1.
 
-**Subcommands:**
+If you want to initialize a new/random model without starting training:
 
-- `init`: Save a randomly initialized model and exit.
+```bash
+./target/release/train init
+```
+
+### SPSA Tuning
+
+There's a small SPSA tuner for optimizing search constants.
+
+Gotcha: it uses [plotters](https://crates.io/crates/plotters) to draw some nice graphs of the params as it is tuning, so make sure to follow their install steps first (Ubuntu requires setup of fontconfig and freetype).
+
+To set up for SPSA tuning, just copy `tuning/params.example.toml` to `tuning/params.toml` and add the `EngineConfig` fields you want to tune following the example format.
+
+```bash
+make tuner
+
+./target/release/tuner --params tuning/params.toml --book books/UHO_Lichess_4852_v1.epd
+```
+
+**Arguments:**
+
+- `--params`: Path to the parameter TOML.
+- `--book`: Path to an EPD opening book.
+- `--pairs`: Game pairs per iteration (default: 100).
+- `--nodes`: Soft node limit per move (default: 25000).
+- `--iterations`: Stop after this many iterations (runs until Ctrl+C if omitted).
+- `--workers`: Worker threads (default: logical CPUs).
+- `--gain`: How hard to nudge parameters.
+- `--max-plies`: Abort game as draw after this many plies (default: 500).
+- `--resign-score`: Score threshold to adjudicate a win (default: 400).
+- `--resign-moves`: Consecutive moves above resign score needed to resign (default: 3).
+- `--draw-score`: Score threshold for adjudicated draws (default: 10).
+- `--draw-moves`: Consecutive moves within draw score needed to draw (default: 8).
+- `--draw-after`: Moves after the opening before adjudicated draws are allowed (default: 40).
 
 ## Acknowledgements
 

@@ -1,36 +1,31 @@
-use cozy_chess::{BitBoard, Board, Color, Piece, Square};
-use utils::bitset::Bitset;
+use cozy_chess::{BitBoard, Board, Color, File, Piece, Square};
+use utils::board_metrics::BoardMetrics;
 
-const NUM_PIECE_PLACEMENT_FEATURES: usize = Square::NUM * Piece::NUM * Color::NUM;
+use crate::bitset;
+
+const NUM_KING_BUCKETS: usize = 12;
+const NUM_PIECE_FEATURES: usize = Square::NUM * Piece::NUM * Color::NUM;
 const NUM_SUPPORT_FEATURES: usize = Square::NUM * 2;
-const NUM_SPACE_FEATURES: usize = Square::NUM * 2;
 const NUM_THREAT_FEATURES: usize = Square::NUM * 2;
 
 pub const NUM_FEATURES: usize =
-    NUM_PIECE_PLACEMENT_FEATURES + NUM_SUPPORT_FEATURES + NUM_SPACE_FEATURES + NUM_THREAT_FEATURES; // 1152 total
+    NUM_KING_BUCKETS * NUM_PIECE_FEATURES + NUM_SUPPORT_FEATURES + NUM_THREAT_FEATURES;
 
 // Exported to the analysis tool
 pub const PIECE_FEATURES_START: usize = 0;
-pub const PIECE_FEATURES_END: usize = NUM_PIECE_PLACEMENT_FEATURES;
+pub const PIECE_FEATURES_END: usize = NUM_KING_BUCKETS * NUM_PIECE_FEATURES;
 pub const US_SUPPORT_START: usize = PIECE_FEATURES_END;
 pub const US_SUPPORT_END: usize = US_SUPPORT_START + Square::NUM;
 pub const THEM_SUPPORT_START: usize = US_SUPPORT_END;
 pub const THEM_SUPPORT_END: usize = THEM_SUPPORT_START + Square::NUM;
-pub const US_SPACE_START: usize = THEM_SUPPORT_END;
-pub const US_SPACE_END: usize = US_SPACE_START + Square::NUM;
-pub const THEM_SPACE_START: usize = US_SPACE_END;
-pub const THEM_SPACE_END: usize = THEM_SPACE_START + Square::NUM;
-pub const US_THREATS_START: usize = THEM_SPACE_END;
+pub const US_THREATS_START: usize = THEM_SUPPORT_END;
 pub const US_THREATS_END: usize = US_THREATS_START + Square::NUM;
 pub const THEM_THREATS_START: usize = US_THREATS_END;
 pub const THEM_THREATS_END: usize = THEM_THREATS_START + Square::NUM;
 
 /// Encodes a board position into a dense f32 feature array from a perspective.
-/// Used during training where f32 tensors are required.
 pub fn encode_board(
     board: &Board,
-    white_attacks: BitBoard,
-    black_attacks: BitBoard,
     white_support: BitBoard,
     black_support: BitBoard,
     white_threats: BitBoard,
@@ -38,21 +33,24 @@ pub fn encode_board(
     perspective: Color,
 ) -> [f32; NUM_FEATURES] {
     let mut features = [0f32; NUM_FEATURES];
+    let mirror = king_is_on_the_right(board, perspective);
+    let bucket_offset = king_bucket(board, perspective) * NUM_PIECE_FEATURES;
 
-    // Piece placements
+    // Piece placements (per king bucket)
     for color in [Color::White, Color::Black] {
         let side_offset = if color == perspective { 0 } else { Piece::NUM };
         for piece in Piece::ALL {
             let piece_idx = side_offset + piece as usize;
             for sq in board.colored_pieces(color, piece) {
-                let sq_idx = sq.relative_to(perspective) as usize;
-                features[sq_idx * (Piece::NUM * Color::NUM) + piece_idx] = 1.0;
+                let sq_idx = transform_square(sq, perspective, mirror) as usize;
+                features[bucket_offset + sq_idx * (Piece::NUM * Color::NUM) + piece_idx] = 1.0;
             }
         }
     }
 
     // Support
-    let (us_support, them_support) = from_perspective(white_support, black_support, perspective);
+    let (us_support, them_support) =
+        from_perspective(white_support, black_support, perspective, mirror);
     for sq in us_support {
         features[US_SUPPORT_START + sq as usize] = 1.0;
     }
@@ -60,21 +58,9 @@ pub fn encode_board(
         features[THEM_SUPPORT_START + sq as usize] = 1.0;
     }
 
-    // Space (controlled non-piece squares)
-    let white_pieces = board.colors(Color::White);
-    let white_space_bb = white_attacks & !white_pieces;
-    let black_pieces = board.colors(Color::Black);
-    let black_space_bb = black_attacks & !black_pieces;
-    let (us_space, them_space) = from_perspective(white_space_bb, black_space_bb, perspective);
-    for sq in us_space {
-        features[US_SPACE_START + sq as usize] = 1.0;
-    }
-    for sq in them_space {
-        features[THEM_SPACE_START + sq as usize] = 1.0;
-    }
-
     // Threats
-    let (us_threats, them_threats) = from_perspective(white_threats, black_threats, perspective);
+    let (us_threats, them_threats) =
+        from_perspective(white_threats, black_threats, perspective, mirror);
     for sq in us_threats {
         features[US_THREATS_START + sq as usize] = 1.0;
     }
@@ -85,31 +71,27 @@ pub fn encode_board(
     features
 }
 
-/// Encodes a board position into a packed bitset for inference.
-///
-/// Bitset is faster than f32 for inference: XOR finds changed features instantly,
-/// and storage is 64x denser (64 bits per u64 vs one f32 per feature).
-/// Training still uses the f32 version above since tensors require floats.
+/// Encodes features into a packed bitset for inference.
 pub fn encode_board_bitset(
     board: &Board,
-    white_attacks: BitBoard,
-    black_attacks: BitBoard,
     white_support: BitBoard,
     black_support: BitBoard,
     white_threats: BitBoard,
     black_threats: BitBoard,
     perspective: Color,
-) -> Bitset<NUM_FEATURES> {
-    let mut bitset = Bitset::default();
+) -> bitset!(NUM_FEATURES) {
+    let mut bitset: bitset!(NUM_FEATURES) = Default::default();
+    let mirror = king_is_on_the_right(board, perspective);
+    let bucket_offset = king_bucket(board, perspective) * NUM_PIECE_FEATURES;
 
-    // Piece placements
+    // Piece placements (per king bucket)
     for color in [Color::White, Color::Black] {
         let side_offset = if color == perspective { 0 } else { Piece::NUM };
         for piece in Piece::ALL {
             let piece_idx = side_offset + piece as usize;
             for sq in board.colored_pieces(color, piece) {
-                let sq_idx = sq.relative_to(perspective) as usize;
-                bitset.set(sq_idx * (Piece::NUM * Color::NUM) + piece_idx);
+                let sq_idx = transform_square(sq, perspective, mirror) as usize;
+                bitset.set(bucket_offset + sq_idx * (Piece::NUM * Color::NUM) + piece_idx);
             }
         }
     }
@@ -118,33 +100,97 @@ pub fn encode_board_bitset(
     // whole ranks at once instead of iterating per square.
 
     // Support
-    let (us_support, them_support) = from_perspective(white_support, black_support, perspective);
+    let (us_support, them_support) =
+        from_perspective(white_support, black_support, perspective, mirror);
     bitset.set_u64(bitset.u64_index(US_SUPPORT_START), us_support.0);
     bitset.set_u64(bitset.u64_index(THEM_SUPPORT_START), them_support.0);
 
-    // Space (controlled non-piece squares)
-    let white_pieces = board.colors(Color::White);
-    let white_space_bb = white_attacks & !white_pieces;
-    let black_pieces = board.colors(Color::Black);
-    let black_space_bb = black_attacks & !black_pieces;
-    let (us_space, them_space) = from_perspective(white_space_bb, black_space_bb, perspective);
-    bitset.set_u64(bitset.u64_index(US_SPACE_START), us_space.0);
-    bitset.set_u64(bitset.u64_index(THEM_SPACE_START), them_space.0);
-
     // Threats
-    let (us_threats, them_threats) = from_perspective(white_threats, black_threats, perspective);
+    let (us_threats, them_threats) =
+        from_perspective(white_threats, black_threats, perspective, mirror);
     bitset.set_u64(bitset.u64_index(US_THREATS_START), us_threats.0);
     bitset.set_u64(bitset.u64_index(THEM_THREATS_START), them_threats.0);
 
     bitset
 }
 
-/// (us, them) bitboards relative to perspective. Ranks are flipped for black
-/// so that rank 1 is always our back rank.
-fn from_perspective(white: BitBoard, black: BitBoard, perspective: Color) -> (BitBoard, BitBoard) {
-    match perspective {
+/// Active feature indices for one perspective.
+pub type FeatureIndices = smallvec::SmallVec<[u32; 128]>;
+
+/// Encodes a list of indices of active features for one perspective.
+pub fn encode_board_indices(
+    board: &Board,
+    metrics: &BoardMetrics,
+    perspective: Color,
+) -> FeatureIndices {
+    let bitset = encode_board_bitset(
+        board,
+        metrics.support[Color::White as usize],
+        metrics.support[Color::Black as usize],
+        metrics.threats[Color::White as usize],
+        metrics.threats[Color::Black as usize],
+        perspective,
+    );
+
+    let mut indices = FeatureIndices::new();
+    bitset.for_each_active(|index| indices.push(index as u32));
+
+    indices
+}
+
+/// King buckets divides the board into regions, and the king's location
+/// in the region determines which set of accumulator weights are used.
+/// https://chessprogramming.org/NNUE#King_Input_Buckets
+///
+/// Buckets based on PlentyChess:
+/// https://github.com/Yoshie2000/PlentyChess/blob/main/src/nnue.h
+#[rustfmt::skip]
+const KING_BUCKETS: [u8; Square::NUM] = [
+    0,  1,  2,  3,  3,  2,  1,  0,
+    4,  5,  6,  7,  7,  6,  5,  4,
+    8,  8,  9,  9,  9,  9,  8,  8,
+    10, 10, 10, 10, 10, 10, 10, 10,
+    11, 11, 11, 11, 11, 11, 11, 11,
+    11, 11, 11, 11, 11, 11, 11, 11,
+    11, 11, 11, 11, 11, 11, 11, 11,
+    11, 11, 11, 11, 11, 11, 11, 11,
+];
+
+/// Which king bucket this position falls into (from "our" perspective).
+fn king_bucket(board: &Board, perspective: Color) -> usize {
+    KING_BUCKETS[board.king(perspective).relative_to(perspective) as usize] as usize
+}
+
+/// Returns true if the board should be mirrored based on the king's file.
+/// This way the king will always be on the left side of the board.
+/// This reduces the network's input space and is done in most engines.
+/// https://chessprogramming.org/NNUE#horizontal-mirroring
+fn king_is_on_the_right(board: &Board, perspective: Color) -> bool {
+    board.king(perspective).file() >= File::E
+}
+
+/// Square as seen from our side: ranks flipped for black, files when mirroring.
+fn transform_square(sq: Square, perspective: Color, mirror: bool) -> Square {
+    let sq = sq.relative_to(perspective);
+    if mirror { sq.flip_file() } else { sq }
+}
+
+/// (us, them) bitboards relative to perspective.
+fn from_perspective(
+    white: BitBoard,
+    black: BitBoard,
+    perspective: Color,
+    mirror: bool,
+) -> (BitBoard, BitBoard) {
+    let (us, them) = match perspective {
         Color::White => (white, black),
         Color::Black => (black.flip_ranks(), white.flip_ranks()),
+    };
+
+    if mirror {
+        (us.flip_files(), them.flip_files())
+    } else {
+        (us, them)
     }
 }
 
@@ -160,6 +206,8 @@ mod tests {
         "rnbqkb1r/pp1p1ppp/4pn2/2p5/2PP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 0 4", // Sicilian
         "8/8/8/8/8/5k2/8/4K2R w - - 0 1",                           // Endgame
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", // Kiwipete
+        "q1q1k3/8/8/8/8/8/8/QQ2K3 w - - 0 1",                       // Promoted queens
+        "4k3/8/8/3q1p2/2P1N3/2N5/8/4K3 w - - 0 1",                  // Support and threats
     ];
 
     #[test]
@@ -171,8 +219,6 @@ mod tests {
             for perspective in [Color::White, Color::Black] {
                 let features = encode_board(
                     &board,
-                    metrics.attacks[Color::White as usize],
-                    metrics.attacks[Color::Black as usize],
                     metrics.support[Color::White as usize],
                     metrics.support[Color::Black as usize],
                     metrics.threats[Color::White as usize],
@@ -182,8 +228,6 @@ mod tests {
 
                 let bitset = encode_board_bitset(
                     &board,
-                    metrics.attacks[Color::White as usize],
-                    metrics.attacks[Color::Black as usize],
                     metrics.support[Color::White as usize],
                     metrics.support[Color::Black as usize],
                     metrics.threats[Color::White as usize],
@@ -203,5 +247,36 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_white_king_mirroring() {
+        // King on E1 should encode to D1 for white.
+        let board: Board = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+            .parse()
+            .unwrap();
+
+        let metrics = BoardMetrics::new(&board);
+        let features = encode_board(
+            &board,
+            metrics.support[Color::White as usize],
+            metrics.support[Color::Black as usize],
+            metrics.threats[Color::White as usize],
+            metrics.threats[Color::Black as usize],
+            Color::White,
+        );
+
+        let king = Piece::King as usize;
+        let per_square = Piece::NUM * Color::NUM;
+        // e1 (and mirrored d1) should both be in bucket 3.
+        let offset = 3 * NUM_PIECE_FEATURES;
+        assert_eq!(
+            features[offset + Square::D1 as usize * per_square + king],
+            1.0
+        );
+        assert_eq!(
+            features[offset + Square::E1 as usize * per_square + king],
+            0.0
+        );
     }
 }

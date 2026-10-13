@@ -6,6 +6,7 @@ use cozy_chess::Board;
 use search::Engine;
 use uci::{NULL_MOVE, UciOutput, move_to_uci};
 
+use crate::bench::run_benchmark;
 use crate::display::display_position;
 use crate::search_metadata::SearchResultMeta;
 
@@ -24,6 +25,8 @@ pub enum EngineCommand {
     Go(uci::commands::GoParams),
     /// Display current position.
     Display,
+    /// Run the engine benchmark.
+    Bench,
     /// Shut down the worker thread.
     Quit,
 }
@@ -35,16 +38,16 @@ pub enum EngineCommand {
 pub struct EngineWorker {
     engine: Engine,
     rx: Receiver<EngineCommand>,
-    output: Sender<UciOutput>,
+    uci_tx: Sender<UciOutput>,
     last_search: Option<SearchResultMeta>,
 }
 
 impl EngineWorker {
-    pub fn new(engine: Engine, rx: Receiver<EngineCommand>, output: Sender<UciOutput>) -> Self {
+    pub fn new(engine: Engine, rx: Receiver<EngineCommand>, uci_tx: Sender<UciOutput>) -> Self {
         Self {
             engine,
             rx,
-            output,
+            uci_tx,
             last_search: None,
         }
     }
@@ -55,7 +58,7 @@ impl EngineWorker {
             match cmd {
                 EngineCommand::Go(params) => {
                     let stm = self.engine.board().side_to_move();
-                    let result = self.engine.search(&params, Some(&self.output));
+                    let result = self.engine.search(&params, Some(&self.uci_tx));
 
                     // UCI requires bestmove for every "go" command, even in checkmate positions
                     let mut uci_move = NULL_MOVE.to_string();
@@ -66,11 +69,12 @@ impl EngineWorker {
                             self.last_search = Some(SearchResultMeta::new(lines.to_vec(), stm));
                         }
                         if let Some(mv) = r.primary().and_then(search::PvLine::best_move) {
-                            uci_move = move_to_uci(self.engine.board(), mv);
+                            uci_move =
+                                move_to_uci(self.engine.board(), mv, self.engine.config().chess960);
                         }
                     }
 
-                    let _ = self.output.send(UciOutput::BestMove(uci_move));
+                    let _ = self.uci_tx.send(UciOutput::BestMove(uci_move));
                 }
                 EngineCommand::SetPosition { board, history } => {
                     self.last_search = None;
@@ -86,6 +90,7 @@ impl EngineWorker {
                 EngineCommand::Display => {
                     display_position(self.engine.board(), self.last_search.as_ref())
                 }
+                EngineCommand::Bench => run_benchmark(&mut self.engine),
                 EngineCommand::Quit => break,
             }
         }

@@ -21,7 +21,7 @@ pub struct Args {
     pub epochs: usize,
 
     /// Number of data loader workers.
-    #[arg(long, default_value_t = 4)]
+    #[arg(long, default_value_t = 1)]
     pub workers: usize,
 
     /// Fraction of data for validation set.
@@ -45,12 +45,20 @@ pub struct Args {
     pub shard_size_mb: usize,
 
     /// WDL blending weight (0.0 = pure eval, 1.0 = pure WDL).
-    #[arg(long, default_value_t = 0.3)]
+    #[arg(long, default_value_t = 0.2)]
     pub wdl: f64,
 
     /// Target win-probability for drawn games (smaller = prefer wins over draws).
     #[arg(long, default_value_t = 0.5)]
     pub draw_target: f64,
+
+    /// Skip samples that are in check, captures, or promotes.
+    #[arg(long)]
+    pub quiets_only: bool,
+
+    /// Random seed for train/val/test split assignment.
+    #[arg(long, requires = "restart")]
+    pub seed: Option<u64>,
 
     /// Discard any saved progress and train from epoch 1.
     #[arg(long)]

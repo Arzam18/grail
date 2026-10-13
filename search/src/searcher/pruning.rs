@@ -8,12 +8,7 @@ use super::Searcher;
 
 const NEAR_MATE_VALUE: i16 = MATE_VALUE - 200;
 
-/// Mate distance pruning: adjusts alpha-beta bounds based on the maximum
-/// possible mate score at current ply. Returns true if the search can be pruned.
-///
-/// Example: A mate found at ply P is at least P plies from root, so:
-/// - Best possible score: MATE_VALUE - ply (mate-in-P)
-/// - Worst possible score: -(MATE_VALUE - ply) (mated-in-P)
+/// Mate distance pruning: nothing from here beats a mate in this many plies.
 ///
 /// <https://www.chessprogramming.org/Mate_Distance_Pruning>
 pub(super) fn mate_distance_prune(bounds: &mut Bounds, ply: u8) -> bool {
@@ -37,14 +32,14 @@ impl Searcher {
         is_tactical: bool,
         is_pv_move: bool,
         alpha: i16,
-        static_eval: i16,
+        corrected_eval: i16,
     ) -> bool {
-        if is_pv_move || depth > self.config.futility_max_depth.value || in_check {
+        if is_pv_move || depth > self.config.futility_max_depth || in_check {
             return false;
         }
-        let margin = self.config.futility_base_margin.value
-            + depth.saturating_sub(1) as i16 * self.config.futility_depth_multiplier.value;
-        !is_tactical && static_eval + margin <= alpha
+        let margin = self.config.futility_base_margin
+            + depth.saturating_sub(1) as i16 * self.config.futility_depth_multiplier;
+        !is_tactical && corrected_eval + margin <= alpha
     }
 
     /// Razoring: if eval is far below alpha, drop into qsearch to verify and return early.
@@ -59,11 +54,11 @@ impl Searcher {
         in_check: bool,
         eval: i16,
     ) -> Option<i16> {
-        if depth == 0 || depth > self.config.razor_max_depth.value || in_check {
+        if depth > self.config.razor_max_depth || in_check {
             return None;
         }
-        let margin = self.config.razor_base_margin.value
-            + self.config.razor_depth_coefficient.value * (depth as i16 * depth as i16);
+        let margin = self.config.razor_base_margin
+            + self.config.razor_depth_coefficient * (depth as i16 * depth as i16);
         if eval >= alpha - margin {
             return None;
         }
@@ -90,7 +85,7 @@ impl Searcher {
         in_check: bool,
         is_pv_move: bool,
         alpha: i16,
-        static_eval: i16,
+        corrected_eval: i16,
     ) -> bool {
         if is_pv_move || in_check || node.is_pv() || m.promotion.is_some() {
             return false;
@@ -99,7 +94,7 @@ impl Searcher {
         let board = node.board();
 
         if is_capture {
-            if depth > self.config.see_capture_max_depth.value {
+            if depth > self.config.see_capture_max_depth {
                 return false;
             }
 
@@ -110,32 +105,32 @@ impl Searcher {
             // Only run it on questionable captures (SEE is expensive):
             // Skip if victim >= attacker (looks good) or attacker is trivial/invaluable
             if captured_value >= attacker_value
-                || attacker_value < self.config.see_capture_min_attacker_value.value
+                || attacker_value < self.config.see_capture_min_attacker_value
             {
                 return false;
             }
 
             // When we're behind on eval we need captures to actually win material,
             // but tolerate more at higher depths since there's room to recover.
-            let eval_gap = alpha - static_eval;
-            let depth_margin = self.config.see_capture_depth_margin.value * (depth as i16);
+            let eval_gap = alpha - corrected_eval;
+            let depth_margin = self.config.see_capture_depth_margin * (depth as i16);
             let threshold = -(eval_gap.max(0) + depth_margin);
 
             !see(board, m, threshold)
         } else {
-            if depth > self.config.see_quiet_max_depth.value {
+            if depth > self.config.see_quiet_max_depth {
                 return false;
             }
 
             // Catch quiet moves that walk into losing exchanges (hanging, etc)
             // Tolerate more at higher depths since the search can correct mistakes.
-            let threshold = -(self.config.see_quiet_depth_multiplier.value * depth as i16);
+            let threshold = -(self.config.see_quiet_depth_multiplier * depth as i16);
 
             !see(board, m, threshold)
         }
     }
 
-    /// Null move pruning: give opponent a free move; if we still beat beta, prune the subtree.
+    /// Null move pruning: give the opponent a free move and see if we still beat beta.
     ///
     /// <https://www.chessprogramming.org/Null_Move_Pruning>
     pub(super) fn try_null_move_prune(
@@ -146,39 +141,37 @@ impl Searcher {
         bounds: Bounds,
         in_check: bool,
         try_null_move: bool,
-        static_eval: Option<i16>,
+        corrected_eval: i16,
+        static_eval: i16,
     ) -> Option<i16> {
         if !try_null_move
             || in_check
             || !node.is_cut()
-            || depth < self.config.nmp_min_depth.value
+            || depth < self.config.nmp_min_depth
+            || ply < self.nmp_min_ply
             || node.is_zugzwang()
         {
             return None;
         }
 
         // No point proving that our position is too good if we dont clear beta.
-        if let Some(se) = static_eval {
-            if se < bounds.beta {
-                return None;
-            }
+        if corrected_eval < bounds.beta {
+            return None;
         }
 
         let nm_child = node.create_null_move_child()?;
 
         // Deeper positions get more reduction
-        let base_r = self.config.nmp_base_reduction.value;
-        let mut r = base_r + (depth / self.config.nmp_depth_divisor.value);
+        let base_r = self.config.nmp_base_reduction;
+        let mut r = base_r + (depth / self.config.nmp_depth_divisor);
 
-        if let Some(se) = static_eval {
-            let margin = self.config.nmp_eval_margin.value;
-            if se >= bounds.beta + margin {
-                // Strong positions get extra reduction
-                r = r.saturating_add(1);
-            } else if se <= bounds.beta - margin {
-                // Weak positions get less reduction
-                r = r.saturating_sub(1).max(base_r);
-            }
+        let margin = self.config.nmp_eval_margin;
+        if corrected_eval >= bounds.beta + margin {
+            // Strong positions get extra reduction
+            r = r.saturating_add(1);
+        } else if corrected_eval <= bounds.beta - margin {
+            // Weak positions get less reduction
+            r = r.saturating_sub(1).max(base_r);
         }
 
         if r >= depth {
@@ -190,9 +183,8 @@ impl Searcher {
 
         // Do a reduced depth null search to check if our position is still good enough
         self.search_stack.push_node(&nm_child);
-        let reduced_child_depth = depth.saturating_sub(r + 1);
-        let null_value =
-            -self.search_node(&nm_child, reduced_child_depth, ply + 1, null_bounds, false);
+        let reduced_depth = depth.saturating_sub(r + 1);
+        let null_value = -self.search_node(&nm_child, reduced_depth, ply + 1, null_bounds, false);
         self.search_stack.pop();
 
         // Our position does not hold when giving opponent a free move, so let's not prune.
@@ -205,12 +197,29 @@ impl Searcher {
             return None;
         }
 
+        // Verify NMP decisions if the branch is big enough.
+        if self.nmp_min_ply == 0 && depth >= self.config.nmp_verify_min_depth {
+            self.nmp_min_ply = ply + 3 * reduced_depth / 4;
+            let verify_value = self.search_node(
+                node,
+                reduced_depth,
+                ply,
+                Bounds::null(bounds.beta.saturating_sub(1)),
+                false,
+            );
+            self.nmp_min_ply = 0;
+
+            if verify_value < bounds.beta {
+                return None;
+            }
+        }
+
         self.shared.tt().store(
             node.hash(),
             ply,
             depth.saturating_sub(r),
             null_value,
-            static_eval,
+            Some(static_eval),
             bounds.alpha,
             bounds.beta,
             None,
@@ -227,22 +236,23 @@ impl Searcher {
         node: &Node,
         depth: u8,
         in_check: bool,
+        corrected_eval: i16,
         static_eval: i16,
         bounds: Bounds,
         ply: u8,
         is_improving: bool,
     ) -> Option<i16> {
-        if depth == 0 || depth > self.config.rfp_max_depth.value || in_check || node.is_pv() {
+        if depth > self.config.rfp_max_depth || in_check || node.is_pv() {
             return None;
         }
 
-        let mut margin = self.config.rfp_base_margin.value
-            + (depth as i16 - 1) * self.config.rfp_depth_multiplier.value;
+        let mut margin =
+            self.config.rfp_base_margin + (depth as i16 - 1) * self.config.rfp_depth_multiplier;
         if is_improving {
-            margin -= self.config.rfp_improving_bonus.value;
+            margin -= self.config.rfp_improving_bonus;
         }
 
-        if static_eval - margin >= bounds.beta && static_eval.abs() < NEAR_MATE_VALUE {
+        if corrected_eval - margin >= bounds.beta && corrected_eval.abs() < NEAR_MATE_VALUE {
             self.shared.tt().store(
                 node.hash(),
                 ply,
@@ -258,10 +268,7 @@ impl Searcher {
         None
     }
 
-    /// Late move pruning: near the horizon, skip quiet moves beyond a count threshold.
-    /// As iterative deepening extends the horizon, nodes that were at the frontier open up
-    /// to search more moves. This forms a right-triangle search shape, narrow tip at the
-    /// current horizon, widening toward the root.
+    /// Late move pruning: skip quiets near the horizon once we've searched enough of them.
     ///
     /// <https://www.chessprogramming.org/Futility_Pruning#MoveCountBasedPruning>
     pub(super) fn should_lmp_prune(
@@ -273,25 +280,25 @@ impl Searcher {
         move_index: i32,
         is_improving: bool,
     ) -> bool {
-        let is_cap = node.is_capture(mv);
+        let is_capture = node.is_capture(mv);
         let is_promotion = mv.promotion == Some(Piece::Queen);
 
         if in_check
             || node.is_pv()
-            || is_cap
+            || is_capture
             || is_promotion
-            || depth > self.config.lmp_max_depth.value
+            || depth > self.config.lmp_max_depth
         {
             return false;
         }
 
-        let base = self.config.lmp_base_moves.value;
-        let mult = self.config.lmp_depth_multiplier.value;
+        let base = self.config.lmp_base_moves;
+        let mult = self.config.lmp_depth_multiplier;
         let mut limit = base + (depth as i32 * (depth as i32 + mult)) / 2;
 
         // Be more aggressive (prune earlier) when position isn't improving
         if !is_improving {
-            limit = (limit * self.config.lmp_improving_reduction.value) / 100;
+            limit = (limit * self.config.lmp_improving_reduction) / 100;
         }
 
         move_index > limit
@@ -312,7 +319,7 @@ impl Searcher {
         }
 
         let history_score = hist + cont_hist;
-        let prune_threshold = self.config.history_prune_depth_multiplier.value * depth as i16;
+        let prune_threshold = self.config.history_prune_depth_multiplier * depth as i16;
 
         history_score < prune_threshold
     }

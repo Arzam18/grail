@@ -6,7 +6,8 @@ members = [
   "search",
   "nnue",
   "training",
-  "uci", 
+  "tuning",
+  "uci",
   "utils",
 ]
 
@@ -21,6 +22,7 @@ repository = "https://github.com/jorgenhanssen/grail"
 [workspace.dependencies]
 ahash = "0.8.12"
 arrayvec = "0.7"
+smallvec = "1.15.1"
 cozy-chess = "0.3.4"
 chrono = "0.4"
 clap = { version = "4.6.1", features = ["derive"] }
@@ -48,3 +50,14 @@ lto = true
 codegen-units = 1
 panic = "abort"
 incremental = false
+
+# Release build with debug symbols (samply).
+[profile.profiling]
+inherits = "release"
+debug = true
+
+
+[patch.crates-io]
+# crates version of pyrrhic-rs is outdated, and the git version has a fix I need...
+# Fixes an issue with aarch64 builds (needs c_char, but 0.2.0 hardcoded i8).
+pyrrhic-rs = { git = "https://github.com/Algorhythm-sxv/pyrrhic-rs", rev = "961c059" }

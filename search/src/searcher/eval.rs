@@ -18,12 +18,12 @@ impl Searcher {
     /// Based on Stockfish's approach: VALUE_DRAW - 1 + (nodes & 0x2)
     /// Returns -1 or +1 to break symmetry and prevent repetitive play.
     pub(super) fn draw_value(&self) -> i16 {
-        -1 + (self.nodes & 0x2) as i16
+        -1 + (self.local_nodes & 0x2) as i16
     }
 
     /// Check if the position is a forced draw (fifty-move rule or repetition).
     pub(super) fn is_forced_draw(&self, node: &Node) -> bool {
-        node.is_fifty_move_draw() || self.search_stack.is_repetition(&self.game_history)
+        node.is_fifty_move_draw() || self.search_stack.is_repetition(node, &self.game_history)
     }
 
     /// Probe Syzygy tablebases for an exact WDL score. Returns None if
@@ -31,7 +31,10 @@ impl Searcher {
     /// is below the configured probe threshold.
     pub(super) fn probe_tb_wdl(&self, node: &Node, depth: u8) -> Option<i16> {
         let tb = self.shared.tb()?;
-        if depth < self.config.syzygy_probe_depth.value {
+        if depth < self.config.syzygy_probe_depth {
+            return None;
+        }
+        if node.board().halfmove_clock() != 0 {
             return None;
         }
         let wdl = tablebase::probe_wdl(tb, node.board())?;

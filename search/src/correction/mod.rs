@@ -6,8 +6,8 @@ use utils::is_capture;
 
 use config::EngineConfig;
 
-use crate::history::PieceTo;
-use crate::scores::MATE_VALUE;
+use crate::history::PrevMoves;
+use crate::scores::{MATE_SCORE_BOUND, MATE_VALUE};
 
 use continuation::ContinuationCorrection;
 use position::PositionCorrection;
@@ -33,24 +33,24 @@ impl Correction {
         Self {
             position: PositionCorrection::new(config),
             continuation: ContinuationCorrection::new(config),
-            combined_divisor: config.correction_combined_divisor.value,
-            max_correction: config.correction_history_max_correction.value,
+            combined_divisor: config.correction_combined_divisor,
+            max_correction: config.correction_history_max_correction,
         }
     }
 
     pub fn configure(&mut self, config: &EngineConfig) {
         self.position.configure(config);
         self.continuation.configure(config);
-        self.combined_divisor = config.correction_combined_divisor.value;
-        self.max_correction = config.correction_history_max_correction.value;
+        self.combined_divisor = config.correction_combined_divisor;
+        self.max_correction = config.correction_history_max_correction;
         self.reset();
     }
 
     pub fn matches_config(&self, config: &EngineConfig) -> bool {
         self.position.matches_config(config)
             && self.continuation.matches_config(config)
-            && self.combined_divisor == config.correction_combined_divisor.value
-            && self.max_correction == config.correction_history_max_correction.value
+            && self.combined_divisor == config.correction_combined_divisor
+            && self.max_correction == config.correction_history_max_correction
     }
 
     pub fn reset(&mut self) {
@@ -59,7 +59,7 @@ impl Correction {
     }
 
     /// Returns the static eval adjusted by the correction history.
-    pub fn adjust(&self, board: &Board, prev_moves: &[Option<PieceTo>], eval: i16) -> i16 {
+    pub fn adjust(&self, board: &Board, prev_moves: &PrevMoves, eval: i16) -> i16 {
         let total =
             self.position.weighted_value(board) + self.continuation.weighted_value(prev_moves);
         let adjustment = (total / self.combined_divisor) as i16;
@@ -73,7 +73,7 @@ impl Correction {
     pub fn update(
         &mut self,
         board: &Board,
-        prev_moves: &[Option<PieceTo>],
+        prev_moves: &PrevMoves,
         in_check: bool,
         best_move: Option<Move>,
         best_value: i16,
@@ -89,6 +89,10 @@ impl Correction {
             if is_capture(board, mv) || mv.promotion.is_some() {
                 return;
             }
+        }
+
+        if best_value.abs() >= MATE_SCORE_BOUND {
+            return;
         }
 
         // Don't update if the search and the eval disagree on the direction.

@@ -11,7 +11,7 @@ use utils::{Node, NodeType, has_legal_moves};
 
 use crate::{
     aspiration::Pass,
-    history::PieceTo,
+    history::{PieceTo, PrevMoves},
     move_ordering::{MAX_CAPTURES, MAX_QUIETS, MainMoveGenerator},
     pv::PvLine,
     result::SearchResult,
@@ -46,11 +46,21 @@ impl Searcher {
         self.init_search();
 
         let mut controller =
-            SearchController::new(params, &self.board, self.config.move_overhead.value as u64);
+            SearchController::new(params, &self.board, self.config.move_overhead as u64);
         self.deadline = controller.deadline();
-        self.node_limit = params.nodes;
 
-        let pv_count = self.config.multi_pv.value as usize;
+        // Oh boy...
+        // During datagen with softnodes (10k), several threads would hang
+        // for an hour inside a single search. Best guess: tb/tt makes
+        // a bunch of iterations cheap, depth climbs up, and then one
+        // iteration is a bit more expensive and the deep iteration explodes.
+        // So as a pragmatic failsafe I present a (generous) hard node limit,
+        // and datagen has worked fine since I added it, so here it will stay.
+        self.node_limit = params
+            .nodes
+            .or_else(|| params.soft_nodes.map(|n| n.saturating_mul(16)));
+
+        let pv_count = self.config.multi_pv as usize;
         let root = Node::new(self.board.clone(), NodeType::Pv);
         let mut depth = 1u8;
 
@@ -92,8 +102,16 @@ impl Searcher {
                     depth,
                     pv.score,
                     pv.best_move(),
-                    self.config.multi_pv.value,
+                    self.config.multi_pv,
                 );
+            }
+
+            // Soft node limit: finish the current iteration, but don't start
+            // a new one once the budget is spent.
+            if let Some(soft_limit) = params.soft_nodes {
+                if self.searched_nodes() >= soft_limit {
+                    break;
+                }
             }
 
             depth += 1;
@@ -175,7 +193,7 @@ impl Searcher {
                 _ => {
                     failures += 1;
                     retries += 1;
-                    if retries >= self.config.aspiration_window_retries.value {
+                    if retries >= self.config.aspiration_window_retries {
                         self.multi_pv.lines[pv_index].window.fully_extend();
                         retries = 0;
                     }
@@ -186,18 +204,19 @@ impl Searcher {
 
     /// Initializes state for a new search.
     fn init_search(&mut self) {
-        self.nodes = 0;
+        self.local_nodes = 0;
         self.max_ply_reached = 1;
+        self.nmp_min_ply = 0;
 
         self.search_stack.clear();
         self.search_stack.push(SearchNode::new(self.board.hash()));
 
         self.multi_pv.init(
-            self.config.multi_pv.value as usize,
-            self.config.aspiration_window_size.value,
-            self.config.aspiration_window_widen.value,
-            self.config.aspiration_window_depth.value,
-            self.config.aspiration_score_divisor.value,
+            self.config.multi_pv as usize,
+            self.config.aspiration_window_size,
+            self.config.aspiration_window_widen,
+            self.config.aspiration_window_depth,
+            self.config.aspiration_score_divisor,
         );
     }
 
@@ -216,11 +235,9 @@ impl Searcher {
 
         let singular = self.search_stack.current().and_then(|n| n.singular);
 
-        self.check_limits();
         if self.shared.is_stopped() {
             return 0;
         }
-        self.increment_nodes();
 
         if ply > 0 && self.is_forced_draw(node) {
             return self.draw_value();
@@ -249,50 +266,17 @@ impl Searcher {
         let original_bounds = bounds;
         let is_pv_node = node.is_pv();
 
-        let tt_info: Option<ProbeResult> = if let Some(tt) = self.shared.tt().probe(hash, ply) {
-            // Only trust value/bound for cutoffs if the TT entry comes from a
-            // search at least as deep as we need. Shallow results may have
-            // missed tactics and can't safely prune the current search.
-            //
-            // Don't do TT cutoffs in PV nodes or during singular search.
-            if !is_pv_node && singular.is_none() && tt.depth >= depth {
-                match tt.bound {
-                    // Exact: previous search found true minimax value
-                    Bound::Exact => {
-                        if let Some(m) = tt.best_move {
-                            self.pv_table.set_move(ply, m);
-                        }
-                        return tt.value;
-                    }
-                    // Lower: previous search failed high (value >= beta), so value is at least this good
-                    Bound::Lower => {
-                        bounds.raise_alpha(tt.value);
-                        if bounds.is_cutoff(bounds.alpha) {
-                            if let Some(m) = tt.best_move {
-                                self.pv_table.set_move(ply, m);
-                            }
-                            return tt.value;
-                        }
-                    }
-                    // Upper: previous search failed low (value <= alpha), so value is at most this bad
-                    Bound::Upper => {
-                        bounds.beta = bounds.beta.min(tt.value);
-                        if bounds.beta <= bounds.alpha {
-                            if let Some(m) = tt.best_move {
-                                self.pv_table.set_move(ply, m);
-                            }
-                            return bounds.beta;
-                        }
-                    }
-                }
-            }
+        let tt_info = self.shared.tt().probe(hash, ply);
 
-            // Even if we are not able to return the TT move,
-            // it is still valuable for cached static eval as hint for move ordering, etc.
-            Some(tt)
-        } else {
-            None
-        };
+        // Test if we can early-return using the TT.
+        if let Some(tt) = tt_info {
+            if can_tt_cutoff(tt, bounds, depth, is_pv_node, singular.is_some()) {
+                if let Some(m) = tt.best_move {
+                    self.pv_table.set_move(ply, m);
+                }
+                return tt.value;
+            }
+        }
 
         let in_check = node.in_check();
         let tt_move = tt_info.and_then(|t| t.best_move);
@@ -302,16 +286,14 @@ impl Searcher {
             .and_then(|t| t.static_eval)
             .unwrap_or_else(|| self.static_eval(node));
 
-        let prev_moves = self
-            .continuation_history
-            .get_prev_moves(self.search_stack.as_slice());
+        let prev_moves = self.search_stack.prev_moves();
 
         let corrected_eval =
             self.shared
                 .correction()
                 .adjust(node.board(), &prev_moves, static_eval);
 
-        // Prefer the TT score over static eval so trend sees what search already found.
+        // Prefer the TT score over correct static eval
         let stack_eval = tt_info
             .map(|tt| match tt.bound {
                 Bound::Exact => tt.value,
@@ -341,7 +323,8 @@ impl Searcher {
                 bounds,
                 in_check,
                 null_move_allowed,
-                Some(corrected_eval),
+                corrected_eval,
+                static_eval,
             ) {
                 return score;
             }
@@ -354,6 +337,7 @@ impl Searcher {
             depth,
             in_check,
             corrected_eval,
+            static_eval,
             bounds,
             ply,
             is_improving,
@@ -363,8 +347,8 @@ impl Searcher {
 
         // Internal Iterative Reduction: reduce depth when no TT move is found.
         // https://www.chessprogramming.org/Internal_Iterative_Reductions
-        let depth = if ply > 0 && tt_move.is_none() && depth >= self.config.iir_min_depth.value {
-            depth.saturating_sub(self.config.iir_reduction.value)
+        let depth = if ply > 0 && tt_move.is_none() && depth >= self.config.iir_min_depth {
+            depth.saturating_sub(self.config.iir_reduction)
         } else {
             depth
         };
@@ -387,12 +371,12 @@ impl Searcher {
         let enemy_attacks = node.attacks_for(!node.side_to_move());
         let mut movegen = MainMoveGenerator::new(
             best_move_hint,
-            prev_moves.clone(),
-            self.config.quiet_check_bonus.value,
-            self.config.quiet_check_see_margin.value,
-            self.config.bad_quiet_threshold.value,
-            self.config.escape_divisor.value,
-            self.config.unsafe_square_divisor.value,
+            prev_moves,
+            self.config.ordering_quiet_check_bonus,
+            self.config.ordering_quiet_check_see_margin,
+            self.config.ordering_bad_quiet_threshold,
+            self.config.ordering_escape_divisor,
+            self.config.ordering_unsafe_square_divisor,
             threats,
             enemy_attacks,
         );
@@ -448,6 +432,7 @@ impl Searcher {
                 tt_move_is_capture,
                 corrected_eval,
                 singular_result.extension,
+                &prev_moves,
             ) {
                 if self.shared.is_stopped() {
                     break;
@@ -462,7 +447,14 @@ impl Searcher {
 
                 bounds.raise_alpha(best_value);
                 if bounds.is_cutoff(bounds.alpha) {
-                    self.on_fail_high(node, m, depth, &quiets_searched, &captures_searched);
+                    self.on_fail_high(
+                        node,
+                        m,
+                        depth,
+                        &quiets_searched,
+                        &captures_searched,
+                        &prev_moves,
+                    );
                     break;
                 }
 
@@ -494,16 +486,18 @@ impl Searcher {
         // Use original alpha when storing in tables, since the bound type depends on the original expectation.
         // Alpha may have been raised during search, but the bound type depends on
         // whether we improved.
-        self.shared.tt().store(
-            hash,
-            ply,
-            best_move_depth,
-            best_value,
-            Some(static_eval),
-            original_bounds.alpha,
-            bounds.beta,
-            best_move,
-        );
+        if singular.is_none() {
+            self.shared.tt().store(
+                hash,
+                ply,
+                depth,
+                best_value,
+                Some(static_eval),
+                original_bounds.alpha,
+                bounds.beta,
+                best_move,
+            );
+        }
 
         self.shared.correction().update(
             node.board(),
@@ -534,12 +528,13 @@ impl Searcher {
         move_index: i32,
         is_improving: bool,
         tt_move_is_capture: bool,
-        static_eval: i16,
+        corrected_eval: i16,
         extra_extension: i8,
+        prev_moves: &PrevMoves,
     ) -> Option<(i16, bool, u8)> {
         let moved_color = node.board().side_to_move();
         let moved_piece = node.piece_on(m.from).unwrap();
-        let is_cap = node.is_capture(m);
+        let is_capture = node.is_capture(m);
         let is_promotion = m.promotion == Some(Piece::Queen);
         let is_pv_node = node.is_pv();
         let is_pv_move = move_index == 0;
@@ -548,13 +543,25 @@ impl Searcher {
             node,
             m,
             moved_piece,
-            is_cap,
+            is_capture,
             depth,
             in_check,
             is_pv_move,
             bounds.alpha,
-            static_eval,
+            corrected_eval,
         ) {
+            return None;
+        }
+
+        let moved = PieceTo::new(moved_color, moved_piece, m.to);
+        let hist = if is_capture {
+            self.capture_history.get(node.board(), m)
+        } else {
+            self.history_heuristic.get(moved_color, m.from, m.to)
+        };
+        let cont_hist = self.continuation_history.get(prev_moves, moved);
+
+        if self.try_history_prune(depth, is_pv_move, is_capture, is_improving, hist, cont_hist) {
             return None;
         }
 
@@ -564,42 +571,14 @@ impl Searcher {
         self.shared.tt().prefetch(child_hash);
 
         let gives_check = child.in_check();
-        let is_tactical = in_check || gives_check || is_cap || is_promotion;
-
-        if self.try_futility_prune(
-            depth,
-            in_check,
-            is_tactical,
-            is_pv_move,
-            bounds.alpha,
-            static_eval,
-        ) {
-            return None;
-        }
-
-        let hist = if is_cap {
-            self.capture_history.get(node.board(), m)
-        } else {
-            self.history_heuristic.get(moved_color, m.from, m.to)
-        };
-        let cont_hist = {
-            let prev_moves = self
-                .continuation_history
-                .get_prev_moves(self.search_stack.as_slice());
-            let pt = PieceTo::new(moved_color, moved_piece, m.to);
-            self.continuation_history.get(&prev_moves, pt)
-        };
-
-        if self.try_history_prune(depth, is_pv_move, is_cap, is_improving, hist, cont_hist) {
-            return None;
-        }
+        let is_tactical = in_check || gives_check || is_capture || is_promotion;
 
         let reduction = self.get_reduction(
             ply,
             depth,
             is_pv_move,
             is_improving,
-            is_cap,
+            is_capture,
             is_promotion,
             move_index,
             node,
@@ -607,12 +586,25 @@ impl Searcher {
             hist,
             cont_hist,
             tt_move_is_capture,
+            bounds.alpha,
+            corrected_eval,
         );
 
-        let extension = self.get_extension(node, &m, moved_piece, is_cap);
+        let extension = self.get_extension(node, &m, moved_piece, is_capture);
         let extension = (extension + extra_extension).max(0) as u8;
 
         let mut adjusted_depth = depth.saturating_add(extension).saturating_sub(reduction);
+
+        if self.try_futility_prune(
+            adjusted_depth,
+            in_check,
+            is_tactical,
+            is_pv_move,
+            bounds.alpha,
+            corrected_eval,
+        ) {
+            return None;
+        }
 
         let child_bounds = if is_pv_move {
             bounds.invert()
@@ -620,8 +612,8 @@ impl Searcher {
             Bounds::null(bounds.alpha).invert()
         };
 
-        self.search_stack
-            .push_move(&child, m, moved_piece, moved_color);
+        self.increment_nodes();
+        self.search_stack.push_move(&child, moved);
         let mut value = -self.search_node(
             &child,
             adjusted_depth.saturating_sub(1),
@@ -643,8 +635,7 @@ impl Searcher {
             // Search at full depth
             adjusted_depth = depth.saturating_add(extension);
 
-            self.search_stack
-                .push_move(&child, m, moved_piece, moved_color);
+            self.search_stack.push_move(&child, moved);
             value = -self.search_node(
                 &child,
                 adjusted_depth.saturating_sub(1),
@@ -659,8 +650,7 @@ impl Searcher {
         if value > bounds.alpha && value < bounds.beta && !is_pv_move && is_pv_node {
             child.set_type(NodeType::Pv);
 
-            self.search_stack
-                .push_move(&child, m, moved_piece, moved_color);
+            self.search_stack.push_move(&child, moved);
             value = -self.search_node(
                 &child,
                 adjusted_depth.saturating_sub(1),
@@ -671,7 +661,7 @@ impl Searcher {
             self.search_stack.pop();
         }
 
-        let is_quiet = !is_cap && !is_promotion;
+        let is_quiet = !is_capture && !is_promotion;
 
         Some((value, is_quiet, adjusted_depth))
     }
@@ -685,13 +675,10 @@ impl Searcher {
         depth: u8,
         quiets_searched: &[Move],
         captures_searched: &[Move],
+        prev_moves: &PrevMoves,
     ) {
         let board = node.board();
         let is_quiet = !node.is_capture(mv);
-
-        let prev_moves = self
-            .continuation_history
-            .get_prev_moves(self.search_stack.as_slice());
 
         if is_quiet {
             let bonus = self.history_heuristic.get_bonus(depth);
@@ -699,7 +686,7 @@ impl Searcher {
 
             let cont_bonus = self.continuation_history.get_bonus(depth);
             self.continuation_history
-                .update_quiet_all(board, &prev_moves, mv, cont_bonus);
+                .update_quiet_all(board, prev_moves, mv, cont_bonus);
         } else {
             let bonus = self.capture_history.get_bonus(depth);
             self.capture_history.update_capture(board, mv, bonus);
@@ -711,7 +698,7 @@ impl Searcher {
             for &q in quiets_searched {
                 self.history_heuristic.update(board, q, quiet_malus);
                 self.continuation_history
-                    .update_quiet_all(board, &prev_moves, q, cont_malus);
+                    .update_quiet_all(board, prev_moves, q, cont_malus);
             }
         }
 
@@ -720,4 +707,15 @@ impl Searcher {
             self.capture_history.update_capture(board, c, capture_malus);
         }
     }
+}
+
+/// Check if a TT entry can cutoff the search early
+fn can_tt_cutoff(
+    tt: ProbeResult,
+    bounds: Bounds,
+    depth: u8,
+    is_pv: bool,
+    in_singular: bool,
+) -> bool {
+    !is_pv && !in_singular && tt.depth >= depth && tt.covers(bounds)
 }

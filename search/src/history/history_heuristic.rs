@@ -8,7 +8,7 @@ use crate::MAX_DEPTH;
 const HISTORY_SIZE: usize = Color::NUM * Square::NUM * Square::NUM;
 
 /// Scores quiet moves based on search success. Indexed by [color][from][to].
-/// Moves causing beta cutoffs get bonuses; moves searched before a cutoff get malus.
+/// Moves causing beta cutoffs get bonuses and moves searched before it get malus.
 ///
 /// <https://www.chessprogramming.org/History_Heuristic>
 #[derive(Clone)]
@@ -22,30 +22,28 @@ pub struct HistoryHeuristic {
 }
 
 impl HistoryHeuristic {
-    pub fn new(max_history: i32, bonus_multiplier: i32, malus_multiplier: i32) -> Self {
+    pub fn new(config: &EngineConfig) -> Self {
         Self {
             history: vec![0; HISTORY_SIZE],
-
-            max_history,
-
-            bonus_multiplier,
-            malus_multiplier,
+            max_history: config.history_max_value,
+            bonus_multiplier: config.history_bonus_multiplier,
+            malus_multiplier: config.history_malus_multiplier,
         }
     }
 
     pub fn configure(&mut self, config: &EngineConfig) {
-        self.max_history = config.history_max_value.value;
+        self.max_history = config.history_max_value;
 
-        self.bonus_multiplier = config.history_bonus_multiplier.value;
-        self.malus_multiplier = config.history_malus_multiplier.value;
+        self.bonus_multiplier = config.history_bonus_multiplier;
+        self.malus_multiplier = config.history_malus_multiplier;
 
         self.reset();
     }
 
     pub fn matches_config(&self, config: &EngineConfig) -> bool {
-        self.max_history == config.history_max_value.value
-            && self.bonus_multiplier == config.history_bonus_multiplier.value
-            && self.malus_multiplier == config.history_malus_multiplier.value
+        self.max_history == config.history_max_value
+            && self.bonus_multiplier == config.history_bonus_multiplier
+            && self.malus_multiplier == config.history_malus_multiplier
     }
 
     pub fn reset(&mut self) {

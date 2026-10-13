@@ -1,9 +1,7 @@
-#![feature(generic_const_exprs)]
-#![allow(incomplete_features)]
-
 mod attacks;
 pub mod bitset;
 pub mod board_metrics;
+mod book;
 mod eval;
 mod material;
 mod math;
@@ -14,6 +12,7 @@ mod ply;
 mod zobrist;
 
 pub use attacks::{get_attackers_to, get_discovered_attacks, get_queen_moves};
+pub use book::Book;
 pub use eval::flip_eval_perspective;
 pub use material::{
     BISHOP_VALUE, KNIGHT_VALUE, MAJOR_PIECES, MINOR_PIECES, NON_PAWN_PIECES, PAWN_PIECES,

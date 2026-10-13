@@ -19,7 +19,7 @@ impl LmrTable {
                 let move_factor = (move_index as f32 / divisor_float).ln();
                 let value = 0.5 + depth_factor * move_factor;
                 table[Self::index(depth as u8, move_index as i32)] =
-                    FracPly((value * FracPly::ONE as f32) as u16);
+                    FracPly(((value * FracPly::ONE as f32) as i32).max(0));
             }
         }
 
@@ -27,11 +27,11 @@ impl LmrTable {
     }
 
     pub fn configure(&mut self, config: &EngineConfig) {
-        *self = Self::new(config.lmr_divisor.value);
+        *self = Self::new(config.lmr_divisor);
     }
 
     pub fn matches_config(&self, config: &EngineConfig) -> bool {
-        self.divisor == config.lmr_divisor.value
+        self.divisor == config.lmr_divisor
     }
 
     pub fn get(&self, depth: u8, move_index: i32) -> FracPly {

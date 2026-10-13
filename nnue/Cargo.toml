@@ -1,10 +1,10 @@
 [package]
 name = "nnue"
+description = "Grail's NNUE evaluation"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
-description = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
@@ -12,14 +12,20 @@ utils = { path = "../utils" }
 
 cozy-chess = { workspace = true }
 log = { workspace = true }
+smallvec = { workspace = true }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
+wide = "1.7.0"
+
+[build-dependencies]
+cudaforge = { version = "0.1.5", optional = true }
 
 [features]
 default = []
 cuda = [
     "candle-core/cuda",
     "candle-nn/cuda",
+    "dep:cudaforge",
 ]
 metal = [
     "candle-core/metal",
@@ -28,10 +34,6 @@ metal = [
 
 [lib]
 name = "nnue"
-
-[[bin]]
-name = "nnue-analysis"
-path = "src/bin/analysis/main.rs"
 
 [lints]
 workspace = true

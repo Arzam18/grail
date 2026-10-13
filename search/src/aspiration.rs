@@ -34,7 +34,7 @@ impl AspirationWindow {
     }
 
     /// Sets up window for new depth based on previous score.
-    /// Window size increases with score magnitude - winning positions are more volatile.
+    /// Window size increases with score magnitude (winning positions are more volatile).
     pub fn begin_depth(&mut self, depth: u8, prev_score: i16) {
         if depth < self.enabled_from {
             self.bounds = Bounds::FULL;
@@ -63,7 +63,7 @@ impl AspirationWindow {
         self.bounds
     }
 
-    /// Checks score against bounds; widens window on failure.
+    /// Checks score against bounds and widens the window on failure.
     pub fn analyse_pass(&mut self, score: i16) -> Pass {
         if score > self.bounds.alpha && score < self.bounds.beta {
             return Pass::Hit(score);

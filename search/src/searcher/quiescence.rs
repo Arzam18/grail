@@ -8,7 +8,7 @@ use utils::Node;
 use crate::{
     MAX_DEPTH,
     move_ordering::QMoveGenerator,
-    transposition::Bound,
+    transposition::ProbeResult,
     utils::{Bounds, see::see},
 };
 
@@ -27,7 +27,6 @@ impl Searcher {
             return 0;
         }
 
-        self.increment_nodes();
         self.max_ply_reached = self.max_ply_reached.max(ply);
 
         if self.is_forced_draw(node) {
@@ -37,9 +36,7 @@ impl Searcher {
         // Ply limit - return static eval if we've hit max ply
         if ply as usize >= MAX_DEPTH {
             let raw_eval = self.static_eval(node);
-            let prev_moves = self
-                .continuation_history
-                .get_prev_moves(self.search_stack.as_slice());
+            let prev_moves = self.search_stack.prev_moves();
             return self
                 .shared
                 .correction()
@@ -57,25 +54,18 @@ impl Searcher {
         let original_bounds = bounds;
 
         let tt_info = self.shared.tt().probe(hash, ply);
+
+        // Test if we can early-return using the TT.
         if let Some(tt) = tt_info {
-            if !node.is_pv() {
-                match tt.bound {
-                    Bound::Exact => return tt.value,
-                    Bound::Lower if bounds.is_cutoff(tt.value) => return tt.value,
-                    Bound::Upper if tt.value <= bounds.alpha => return tt.value,
-                    _ => {}
-                }
+            if can_tt_cutoff(tt, bounds, node.is_pv()) {
+                return tt.value;
             }
         }
 
-        // Reuse the cached NNUE result from the TT when available; the corrected
-        // value is derived freshly so the cache stays semantically "raw eval".
         let static_eval = tt_info
             .and_then(|t| t.static_eval)
             .unwrap_or_else(|| self.static_eval(node));
-        let prev_moves = self
-            .continuation_history
-            .get_prev_moves(self.search_stack.as_slice());
+        let prev_moves = self.search_stack.prev_moves();
         let stand_pat = self
             .shared
             .correction()
@@ -85,8 +75,7 @@ impl Searcher {
 
         // Delta pruning: skip captures that can't possibly improve alpha
         // https://www.chessprogramming.org/Delta_Pruning
-        let can_delta =
-            !in_check && board_material >= self.config.qs_delta_material_threshold.value;
+        let can_delta = !in_check && board_material >= self.config.qs_delta_material_threshold;
 
         // Do a "stand-pat" evaluation if not in check
         if !in_check {
@@ -147,7 +136,7 @@ impl Searcher {
             if can_delta {
                 let captured = board.piece_on(mv.to);
                 if let Some(piece) = captured {
-                    let mut delta = piece_value(piece) + self.config.qs_delta_margin.value;
+                    let mut delta = piece_value(piece) + self.config.qs_delta_margin;
                     if let Some(promotion) = mv.promotion {
                         delta += piece_value(promotion) - piece_value(Piece::Pawn);
                     }
@@ -155,7 +144,7 @@ impl Searcher {
                         continue;
                     }
                 } else {
-                    // Not a capture (should not happen with mask, but skip for safety)
+                    // Not a capture (should not happen with mask, but skip just in case)
                     continue;
                 }
             }
@@ -181,6 +170,7 @@ impl Searcher {
 
             let child = Node::new(new_board, node.node_type());
 
+            self.increment_nodes();
             self.search_stack.push_node(&child);
             let child_score = self.quiescence_search(&child, bounds.invert(), ply + 1);
             self.search_stack.pop();
@@ -235,4 +225,9 @@ impl Searcher {
             self.capture_history.update_capture(board, c, malus);
         }
     }
+}
+
+/// Check if a TT entry can cutoff the search early
+fn can_tt_cutoff(tt: ProbeResult, bounds: Bounds, is_pv: bool) -> bool {
+    !is_pv && tt.covers(bounds)
 }

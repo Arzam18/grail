@@ -33,6 +33,7 @@ impl Decoder {
 
             // Non-standard commands
             "d" => UciInput::Display,
+            "bench" => UciInput::Bench,
 
             _ => UciInput::Unknown(input.to_string()),
         }
@@ -113,6 +114,7 @@ impl Decoder {
             depth: extract_numeric_param(input, "depth").map(|d| d as u8),
             move_time: extract_numeric_param(input, "movetime"),
             nodes: extract_numeric_param(input, "nodes"),
+            soft_nodes: extract_numeric_param(input, "softnodes"),
         })
     }
 }
@@ -186,10 +188,14 @@ mod tests {
         assert_eq!(go("go depth 20").depth, Some(20));
         assert_eq!(go("go movetime 5000").move_time, Some(5000));
 
-        let nodes = go("go nodes 100000");
-        assert_eq!(nodes.nodes, Some(100000));
-        assert!(nodes.depth.is_none());
-        assert!(nodes.move_time.is_none());
+        let hard_nodes = go("go nodes 100000");
+        assert_eq!(hard_nodes.nodes, Some(100000));
+        assert!(hard_nodes.depth.is_none());
+        assert!(hard_nodes.move_time.is_none());
+
+        let soft_nodes = go("go softnodes 30000");
+        assert_eq!(soft_nodes.soft_nodes, Some(30000));
+        assert!(soft_nodes.nodes.is_none());
     }
 
     #[test]
@@ -224,5 +230,23 @@ mod tests {
         };
         assert_eq!(board, Board::from_str(fen).unwrap());
         assert!(game_history.is_empty());
+    }
+
+    #[test]
+    fn chess960_castling_position() {
+        use cozy_chess::{Color, Piece, Square};
+
+        let UciInput::Position {
+            board,
+            game_history,
+        } = decode("position fen 4k3/8/8/8/8/8/8/1R1K2R1 w GB - 0 1 moves d1g1")
+        else {
+            panic!("expected Position");
+        };
+
+        assert_eq!(board.king(Color::White), Square::G1);
+        assert_eq!(board.piece_on(Square::F1), Some(Piece::Rook));
+        assert_eq!(board.piece_on(Square::B1), Some(Piece::Rook));
+        assert_eq!(game_history.len(), 1);
     }
 }

@@ -1,11 +1,10 @@
 use std::mem::size_of;
-use std::simd::prelude::SimdPartialEq;
-use std::simd::u32x4;
 
 use cozy_chess::{Move, Piece, Square};
 use utils::memory::prefetch;
 
 use crate::scores::MATE_SCORE_BOUND;
+use crate::utils::Bounds;
 
 /// Indicates whether the stored value is exact or a bound.
 #[derive(Clone, Copy, PartialEq, Default)]
@@ -20,7 +19,6 @@ pub enum Bound {
 }
 
 /// Result from probing the transposition table.
-/// Caller should check depth to decide if value/bound are trustworthy for cutoffs.
 #[derive(Clone, Copy)]
 pub struct ProbeResult {
     /// Score from the previous search, mate-adjusted to the probing ply.
@@ -35,11 +33,22 @@ pub struct ProbeResult {
     pub depth: u8,
 }
 
+impl ProbeResult {
+    /// Check if the TT entry covers a window.
+    pub fn covers(&self, bounds: Bounds) -> bool {
+        match self.bound {
+            Bound::Exact => true,
+            Bound::Lower => bounds.is_cutoff(self.value),
+            Bound::Upper => self.value <= bounds.alpha,
+        }
+    }
+}
+
 /// A single TT entry (16 bytes, fits 4 per cache line).
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
 pub struct TTEntry {
-    /// Low 32 bits of the Zobrist hash (checksumed on probe).
+    /// Hash key for verification (0 = empty).
     pub key: u32,
     /// Score from the search.
     pub value: i16,
@@ -59,7 +68,7 @@ const CLUSTER_SIZE: usize = 4;
 const MIN_BUCKETS: usize = 1024;
 
 /// Hash table for memoizing search results.
-/// Uses 4-entry clusters for cache efficiency and SIMD probing.
+/// Uses 4-entry clusters for cache efficiency.
 /// Replacement considers depth, age, and bound type.
 ///
 /// <https://www.chessprogramming.org/Transposition_Table>
@@ -87,12 +96,7 @@ impl TranspositionTable {
     }
 
     pub fn clear(&mut self) {
-        // Clear TT entries
-        unsafe {
-            let ptr = self.entries.as_mut_ptr() as *mut u8;
-            let size = self.entries.len() * size_of::<TTEntry>();
-            std::ptr::write_bytes(ptr, 0, size);
-        }
+        self.entries.fill(TTEntry::default());
         self.generation = 0;
     }
 
@@ -124,33 +128,25 @@ impl TranspositionTable {
     }
 
     /// Probes the TT for a matching entry, returning the deepest match.
-    /// Caller should check result.depth before using value/bound for cutoffs.
     pub fn probe(&self, hash: u64, ply: u8) -> Option<ProbeResult> {
         let idx = (hash as usize) % self.buckets;
         let base = idx * CLUSTER_SIZE;
-        let key32 = hash as u32;
+        let key = tt_key(hash);
 
-        let cluster = &self.entries[base..base + 4];
-        let keys = u32x4::from_array([
-            cluster[0].key,
-            cluster[1].key,
-            cluster[2].key,
-            cluster[3].key,
-        ]);
-        let target_keys = u32x4::splat(key32);
-        let key_matches = keys.simd_eq(target_keys);
+        let cluster = &self.entries[base..base + CLUSTER_SIZE];
 
         // Find deepest matching entry
         let mut best: Option<(usize, u8)> = None;
         for (i, entry) in cluster.iter().enumerate() {
-            if key_matches.test(i) {
-                if let Some((_, d)) = best {
-                    if entry.depth > d {
-                        best = Some((i, entry.depth));
-                    }
-                } else {
+            if entry.key != key {
+                continue;
+            }
+            if let Some((_, d)) = best {
+                if entry.depth > d {
                     best = Some((i, entry.depth));
                 }
+            } else {
+                best = Some((i, entry.depth));
             }
         }
 
@@ -197,7 +193,7 @@ impl TranspositionTable {
         best_move: Option<Move>,
     ) {
         let best_move_packed = pack_move(best_move);
-        let key32 = hash as u32;
+        let key = tt_key(hash);
 
         let bound = if value <= alpha {
             Bound::Upper
@@ -227,7 +223,7 @@ impl TranspositionTable {
         let current_gen = self.generation;
 
         let mut new_entry = TTEntry {
-            key: key32,
+            key,
             value: stored_value,
             bound,
             static_eval: stored_se,
@@ -246,7 +242,7 @@ impl TranspositionTable {
 
         // Same-key hit: only replace if the new entry beats the old one.
         for e in cluster.iter_mut() {
-            if e.key == key32 {
+            if e.key == key {
                 let new_value = depth as i16 + depth_bonus(bound);
                 let old_value = e.depth as i16 + depth_bonus(e.bound);
                 let should_replace =
@@ -288,6 +284,11 @@ impl TranspositionTable {
 
         cluster[victim_idx] = new_entry;
     }
+}
+
+// Use the high bits for key since the low bits are already used for the bucket index
+fn tt_key(hash: u64) -> u32 {
+    ((hash >> 32) as u32).max(1)
 }
 
 /// Packs a move into 16 bits: [15:12]=promo, [11:6]=to, [5:0]=from

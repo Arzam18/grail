@@ -7,8 +7,10 @@ use crate::is_zugzwang;
 use crate::material::total_material;
 use crate::moves::is_capture;
 
-/// Alpha-beta node classification. Pv nodes return an exact score and have a
-/// real PV; Cut nodes failed high and only need a lower bound; All nodes failed
+/// Alpha-beta node classification.
+///
+/// Pv nodes return an exact score and have a
+/// real PV, Cut nodes failed high and only need a lower bound and All nodes failed
 /// low and only need an upper bound.
 ///
 /// <https://www.chessprogramming.org/Node_Types>

@@ -1,5 +1,7 @@
-use cozy_chess::{Color, Move, Piece};
+use cozy_chess::Move;
 use utils::Node;
+
+use crate::history::{PieceTo, PrevMoves};
 
 /// Context for singular extension search.
 #[derive(Clone, Copy)]
@@ -13,12 +15,8 @@ pub struct SingularSearch {
 pub struct SearchNode {
     /// Zobrist hash for repetition detection
     pub hash: u64,
-    /// Move that led to this position
-    pub last_move: Option<Move>,
-    /// Piece that moved (for continuation history)
-    pub piece: Option<Piece>,
-    /// Color of the piece that moved (for continuation history)
-    pub color: Option<Color>,
+    /// Move that led here, for continuation history
+    pub moved: Option<PieceTo>,
     /// Best-known eval at this ply (TT score when available, else corrected static eval)
     pub eval: Option<i16>,
     /// Singular extension context (if in singular search)
@@ -29,20 +27,16 @@ impl SearchNode {
     pub fn new(hash: u64) -> Self {
         Self {
             hash,
-            last_move: None,
-            piece: None,
-            color: None,
+            moved: None,
             eval: None,
             singular: None,
         }
     }
 
-    pub fn with_move(hash: u64, mv: Move, piece: Piece, color: Color) -> Self {
+    pub fn with_move(hash: u64, moved: PieceTo) -> Self {
         Self {
             hash,
-            last_move: Some(mv),
-            piece: Some(piece),
-            color: Some(color),
+            moved: Some(moved),
             eval: None,
             singular: None,
         }
@@ -72,8 +66,8 @@ impl SearchStack {
         self.push(SearchNode::new(node.hash()));
     }
 
-    pub fn push_move(&mut self, node: &Node, mv: Move, piece: Piece, color: Color) {
-        self.push(SearchNode::with_move(node.hash(), mv, piece, color));
+    pub fn push_move(&mut self, node: &Node, moved: PieceTo) {
+        self.push(SearchNode::with_move(node.hash(), moved));
     }
 
     pub fn pop(&mut self) -> Option<SearchNode> {
@@ -113,25 +107,33 @@ impl SearchStack {
 
     /// Detects a single repetition and treats it as a draw.
     /// We don't require threefold because the search tends to cycle once it finds a repetition.
-    pub fn is_repetition(&self, game_history: &ahash::AHashSet<u64>) -> bool {
-        let current_hash = self.nodes[self.nodes.len() - 1].hash;
+    pub fn is_repetition(&self, node: &Node, game_history: &ahash::AHashSet<u64>) -> bool {
+        let ply = self.nodes.len() - 1;
+        let hash = node.hash();
+        let halfmove_clock = node.board().halfmove_clock() as usize;
 
-        // Check if this position was seen in the game before we started searching
-        if game_history.contains(&current_hash) {
-            return true;
-        }
-
-        // Check search path (skip current position)
-        for node in self.nodes.iter().rev().skip(1) {
-            if node.hash == current_hash {
+        // No need to look back further than the halfmove clock because
+        // you can't undo those moves.
+        // Also stepped by 2 because color is baked into the hash, so one ply back can never match anyways.
+        let max_back = halfmove_clock.min(ply);
+        for back in (2..=max_back).step_by(2) {
+            if self.nodes[ply - back].hash == hash {
                 return true;
             }
         }
 
-        false
+        // Same here, only bother with the game history if the clock reaches past the root.
+        halfmove_clock > ply && game_history.contains(&hash)
     }
 
-    pub fn as_slice(&self) -> &[SearchNode] {
-        &self.nodes
+    /// Previous-move context for continuation history/correction.
+    /// Slot i holds the move made i plies ago (0 = opponent last move).
+    pub fn prev_moves(&self) -> PrevMoves {
+        let mut prev_moves: PrevMoves = Default::default();
+        let len = self.nodes.len();
+        for (i, slot) in prev_moves.iter_mut().enumerate().take(len) {
+            *slot = self.nodes[len - 1 - i].moved;
+        }
+        prev_moves
     }
 }
