@@ -9,13 +9,9 @@ pub const SIMD_WIDTH_I16: usize = 32;
 // Different architectures can keep a different number of SIMD vectors in registers at once.
 // Needed because stuff like dot products can then load the large input vector once per batch instead of once per row (which is expensive).
 // Tuned (ish).
-pub const SIMD_BATCH_SIZE: usize = if cfg!(target_feature = "avx512f") {
-    16
-} else if cfg!(any(target_feature = "avx2", target_feature = "neon")) {
-    4
-} else {
-    2
-};
+// Future me: This was actually not the case, and it is CPU specific. So just hardcode 4 for now since it is faster...
+// TODO: Look more into this.
+pub const SIMD_BATCH_SIZE: usize = 4;
 
 pub fn simd_relu(values: &mut [f32]) {
     let len = values.len();
