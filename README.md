@@ -24,7 +24,7 @@ Each release includes builds for a few different CPU architectures:
 | ----------------------- | ----------- | ----------------------------------------------------- |
 | **Linux / Windows**     | `x86-64-v4` | Intel Skylake-X/Ice Lake+ (2017+), AMD Zen 4+ (2022+) |
 | **Linux / Windows**     | `x86-64-v3` | Intel Haswell+ (2013+), AMD Zen 2+ (2019+)            |
-| **Linux ARM / Android** | `aarch64`   | Any 64-bit ARM CPU                                    |
+| **Linux ARM / Android** | `arm64`     | Any 64-bit ARM CPU                                    |
 | **macOS**               | `arm64`     | Apple Silicon (M1/M2/M3/M4)                           |
 
 <!-- prettier-ignore -->
@@ -122,6 +122,8 @@ make datagen
 - `--syzygy-path`: Paths to Syzygy tablebase files.
 - `--max-opening-imbalance`: Discard games whose opening eval exceeds this many centipawns in absolute value.
 - `--max-teleport-plies`: Max plies to teleport along a PV between recorded positions (default: 8).
+- `--max-teleport-pv-fraction`: Max fraction of the PV length allowed when teleporting (default: 0.4).
+- `--sparse-samples`: Record only the anchor positions.
 - `--max-game-plies`: Discard games lasting longer than this many plies (default: 300).
 - `--max-games`: Stop after this many games total.
 - `--dry-run`: Generate samples but don't write the dataset to disk.
@@ -153,6 +155,8 @@ Run it again later and it'll pick up where it left off. Pass `--restart` to star
 - `--shard-size-mb`: Size of each data shard in megabytes (default: 500).
 - `--wdl`: WDL blending weight, 0.0 = pure eval, 1.0 = pure WDL (default: 0.2).
 - `--draw-target`: Target win-probability for drawn games, smaller = prefer wins over draws (default: 0.5).
+- `--quiets-only`: Skip samples that are in check, or whose best move captures or promotes.
+- `--seed`: Seed for the train/validation/test split. Requires `--restart`.
 - `--restart`: Discard saved progress and train from epoch 1.
 
 If you want to initialize a new/random model without starting training:
