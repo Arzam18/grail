@@ -12,7 +12,7 @@ pub struct EngineConfig {
 
     pub aspiration_window_size: i32,
     pub aspiration_window_depth_multiplier: i32,
-    pub aspiration_window_widen: i32,
+    pub aspiration_window_widen: i32, // in cents
     pub aspiration_window_depth: u8,
     pub aspiration_window_retries: i16,
     pub aspiration_score_divisor: i32,
@@ -37,7 +37,7 @@ pub struct EngineConfig {
     pub ordering_escape_divisor: i16,
     pub ordering_unsafe_square_divisor: i16,
 
-    pub lmr_divisor: i32,
+    pub lmr_divisor: i32, // in cents
 
     pub reduction_cut_node: i32,
     pub reduction_not_improving: i32,
@@ -124,7 +124,7 @@ impl Default for EngineConfig {
 
             aspiration_window_size: 40,
             aspiration_window_depth_multiplier: 10,
-            aspiration_window_widen: 2,
+            aspiration_window_widen: 200, // in cents
             aspiration_window_depth: 5,
             aspiration_window_retries: 3,
             aspiration_score_divisor: 16384,
@@ -149,7 +149,7 @@ impl Default for EngineConfig {
             ordering_escape_divisor: 4,
             ordering_unsafe_square_divisor: 20,
 
-            lmr_divisor: 220,
+            lmr_divisor: 220, // in cents
 
             reduction_cut_node: 1024,
             reduction_not_improving: 1024,

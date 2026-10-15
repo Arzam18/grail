@@ -77,14 +77,14 @@ impl AspirationWindow {
         if score <= self.bounds.alpha {
             // fail-low: widen only the low side
             let distance = self.bounds.beta as i32 - score as i32;
-            let span = distance.max(self.start_half) * self.widen;
+            let span = distance.max(self.start_half) * self.widen / 100;
             self.bounds.alpha = (score as i32 - span).max(-SCORE_INF as i32) as i16;
 
             Pass::FailLow
         } else {
             // fail-high
             let distance = score as i32 - self.bounds.alpha as i32;
-            let span = distance.max(self.start_half) * self.widen;
+            let span = distance.max(self.start_half) * self.widen / 100;
             self.bounds.beta = (score as i32 + span).min(SCORE_INF as i32) as i16;
 
             Pass::FailHigh
