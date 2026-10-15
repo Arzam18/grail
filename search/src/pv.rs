@@ -1,3 +1,4 @@
+use config::EngineConfig;
 use cozy_chess::Move;
 
 use crate::MAX_DEPTH;
@@ -63,20 +64,12 @@ impl MultiPvSearchContext {
         }
     }
 
-    pub fn init(
-        &mut self,
-        count: usize,
-        window_size: i16,
-        window_widen: i16,
-        window_depth: u8,
-        score_divisor: i32,
-    ) {
+    pub fn init(&mut self, config: &EngineConfig) {
         self.lines.clear();
         self.excluded.clear();
 
-        for _ in 0..count {
-            let window =
-                AspirationWindow::new(window_size, window_widen, window_depth, score_divisor);
+        for _ in 0..config.multi_pv {
+            let window = AspirationWindow::new(config);
             self.lines.push(PvSearchContext::new(window));
         }
     }

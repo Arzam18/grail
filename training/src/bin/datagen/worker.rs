@@ -36,7 +36,7 @@ impl SelfPlayWorker {
         game_config: GameConfig,
         max_games: Option<usize>,
         multi_pv: u8,
-        create_evaluator: fn() -> nnue::Evaluator,
+        evaluator: nnue::Evaluator,
         opening_source: Arc<OpeningSource>,
         histogram: HistogramHandle,
         tablebases: Option<TableBases<CozyAdapter>>,
@@ -48,7 +48,7 @@ impl SelfPlayWorker {
         };
 
         let stop = Arc::new(AtomicBool::new(false));
-        let engine = Engine::new(&config, stop, create_evaluator);
+        let engine = Engine::new(&config, stop, evaluator);
 
         if let Some(ref tb) = tablebases {
             engine.set_tablebases(tb.clone());

@@ -211,13 +211,7 @@ impl Searcher {
         self.search_stack.clear();
         self.search_stack.push(SearchNode::new(self.board.hash()));
 
-        self.multi_pv.init(
-            self.config.multi_pv as usize,
-            self.config.aspiration_window_size,
-            self.config.aspiration_window_widen,
-            self.config.aspiration_window_depth,
-            self.config.aspiration_score_divisor,
-        );
+        self.multi_pv.init(&self.config);
     }
 
     /// Alpha-beta search with principal variation search (PVS) and late move reductions.
@@ -370,13 +364,9 @@ impl Searcher {
 
         let enemy_attacks = node.attacks_for(!node.side_to_move());
         let mut movegen = MainMoveGenerator::new(
+            &self.config,
             best_move_hint,
             prev_moves,
-            self.config.ordering_quiet_check_bonus,
-            self.config.ordering_quiet_check_see_margin,
-            self.config.ordering_bad_quiet_threshold,
-            self.config.ordering_escape_divisor,
-            self.config.ordering_unsafe_square_divisor,
             threats,
             enemy_attacks,
         );

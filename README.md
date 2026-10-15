@@ -4,7 +4,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
 
-Grail is a hobby chess engine written in Rust. It began as an attempt to make a chess engine and has since become an elaborate system for turning my sanity and electricity bill into Elo. It uses modern search techniques and a fully self-taught NNUE trained on 99 million self-play games. The name refers to the Holy Grail, which may still be easier to find than perfect chess.
+Grail is a hobby chess engine written in Rust. It began as an attempt to make a chess engine and has since become an elaborate system for turning my sanity and electricity bill into Elo. It uses modern search techniques and a fully self-taught NNUE trained on millions of self-play games. The name refers to the Holy Grail, which may still be easier to find than perfect chess.
 
 This repository hosts Grail's official releases and source code. The engine is developed entirely within this repository, which contains the self-play datagen, NNUE training pipeline, SPSA tuner, profiling, and build setup.
 
@@ -24,7 +24,7 @@ Each release includes builds for a few different CPU architectures:
 | ----------------------- | ----------- | ----------------------------------------------------- |
 | **Linux / Windows**     | `x86-64-v4` | Intel Skylake-X/Ice Lake+ (2017+), AMD Zen 4+ (2022+) |
 | **Linux / Windows**     | `x86-64-v3` | Intel Haswell+ (2013+), AMD Zen 2+ (2019+)            |
-| **Linux ARM / Android** | `aarch64`   | Any 64-bit ARM CPU                                    |
+| **Linux ARM / Android** | `arm64`     | Any 64-bit ARM CPU                                    |
 | **macOS**               | `arm64`     | Apple Silicon (M1/M2/M3/M4)                           |
 
 <!-- prettier-ignore -->
@@ -122,7 +122,9 @@ make datagen
 - `--syzygy-path`: Paths to Syzygy tablebase files.
 - `--max-opening-imbalance`: Discard games whose opening eval exceeds this many centipawns in absolute value.
 - `--max-teleport-plies`: Max plies to teleport along a PV between recorded positions (default: 8).
-- `--max-game-plies`: Discard games lasting longer than this many moves (default: 300).
+- `--max-teleport-pv-fraction`: Max fraction of the PV length allowed when teleporting (default: 0.4).
+- `--sparse-samples`: Record only the anchor positions.
+- `--max-game-plies`: Discard games lasting longer than this many plies (default: 300).
 - `--max-games`: Stop after this many games total.
 - `--dry-run`: Generate samples but don't write the dataset to disk.
 
@@ -142,17 +144,19 @@ Run it again later and it'll pick up where it left off. Pass `--restart` to star
 
 **Arguments:**
 
-- `--batch-size`: Batch size for training (default: 8192).
+- `--batch-size`: Batch size for training (default: 16384).
 - `--learning-rate`: Initial learning rate (default: 0.001).
 - `--epochs`: Max number of epochs to train (default: 200).
-- `--workers`: Number of worker threads for data loading (default: 4).
+- `--workers`: Number of worker threads for data loading (default: 1).
 - `--val-ratio`: Fraction of data to use for validation (default: 0.05).
 - `--test-ratio`: Fraction of data to use for testing (default: 0.01).
 - `--lr-decay`: Learning rate decay factor (default: 0.95).
 - `--patience`: Epochs without improvement before early stopping (default: 5).
 - `--shard-size-mb`: Size of each data shard in megabytes (default: 500).
-- `--wdl`: WDL blending weight, 0.0 = pure eval, 1.0 = pure WDL (default: 0.3).
+- `--wdl`: WDL blending weight, 0.0 = pure eval, 1.0 = pure WDL (default: 0.2).
 - `--draw-target`: Target win-probability for drawn games, smaller = prefer wins over draws (default: 0.5).
+- `--quiets-only`: Skip samples that are in check, or whose best move captures or promotes.
+- `--seed`: Seed for the train/validation/test split. Requires `--restart`.
 - `--restart`: Discard saved progress and train from epoch 1.
 
 If you want to initialize a new/random model without starting training:

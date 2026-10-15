@@ -395,7 +395,7 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "serde",
 ]
@@ -1271,11 +1271,9 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "grail"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "ahash",
- "candle-core",
- "candle-nn",
  "config",
  "cozy-chess",
  "nnue",
@@ -1634,7 +1632,7 @@ dependencies = [
 
 [[package]]
 name = "nnue"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -2265,7 +2263,7 @@ dependencies = [
 
 [[package]]
 name = "search"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "ahash",
  "arrayvec",
@@ -2655,7 +2653,7 @@ dependencies = [
 
 [[package]]
 name = "training"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "ahash",
  "candle-core",
@@ -2690,11 +2688,9 @@ checksum = "17f77d76d837a7830fe1d4f12b7b4ba4192c1888001c7164257e4bc6d21d96b4"
 
 [[package]]
 name = "tuning"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "ahash",
- "candle-core",
- "candle-nn",
  "clap",
  "config",
  "cozy-chess",
@@ -2727,7 +2723,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "uci"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "ahash",
  "config",
@@ -2835,7 +2831,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "utils"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "cozy-chess",
  "log",

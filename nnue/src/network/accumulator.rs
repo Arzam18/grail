@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use cozy_chess::Color;
 use wide::{i8x32, i16x16, i16x32, i32x16};
 
@@ -30,11 +32,12 @@ const _: () = assert!(
 ///
 /// Weights are quantized to i8 and accumulated in i16 for wider SIMD.
 /// Dequantization back to f32 happens when outputting to the next layer.
+#[derive(Clone)]
 pub struct Accumulator {
     // [feature_idx][embedding_idx]
-    weights: Vec<i8>,
+    weights: Arc<Vec<i8>>,
     // [embedding_idx]
-    biases: Vec<i16>,
+    biases: Arc<[i16]>,
     // Accumulated sum of active weights [embedding_idx]
     buffer_white: [i16; EMBEDDING_SIZE],
     buffer_black: [i16; EMBEDDING_SIZE],
@@ -45,7 +48,7 @@ pub struct Accumulator {
 
     // Per-neuron weight quantization scale factors to convert it back to f32.
     // USes 1/scale to avoid slower division operations.
-    inv_scales: Vec<f32>,
+    inv_scales: Arc<[f32]>,
 }
 
 impl Accumulator {
@@ -61,13 +64,13 @@ impl Accumulator {
         buffer_black.copy_from_slice(&biases_i16);
 
         Self {
-            weights: weights_i8,
-            biases: biases_i16,
+            weights: Arc::new(weights_i8),
+            biases: biases_i16.into(),
             buffer_white,
             buffer_black,
             previous_white: Default::default(),
             previous_black: Default::default(),
-            inv_scales,
+            inv_scales: inv_scales.into(),
         }
     }
 
