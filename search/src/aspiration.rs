@@ -1,3 +1,5 @@
+use config::EngineConfig;
+
 use crate::scores::{MATE_SCORE_BOUND, SCORE_INF};
 
 use crate::utils::Bounds;
@@ -24,20 +26,14 @@ pub struct AspirationWindow {
 }
 
 impl AspirationWindow {
-    pub fn new(
-        start_half: i16,
-        depth_multiplier: i16,
-        widen: i16,
-        enabled_from: u8,
-        score_divisor: i32,
-    ) -> Self {
+    pub fn new(config: &EngineConfig) -> Self {
         Self {
             bounds: Bounds::FULL,
-            start_half,
-            depth_multiplier,
-            widen,
-            enabled_from,
-            score_divisor,
+            start_half: config.aspiration_window_size,
+            depth_multiplier: config.aspiration_window_depth_multiplier,
+            widen: config.aspiration_window_widen,
+            enabled_from: config.aspiration_window_depth,
+            score_divisor: config.aspiration_score_divisor,
         }
     }
 

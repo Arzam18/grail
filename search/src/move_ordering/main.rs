@@ -1,4 +1,5 @@
 use arrayvec::ArrayVec;
+use config::EngineConfig;
 use cozy_chess::{BitBoard, Move, Piece};
 use utils::{PAWN_VALUE, captured_piece, gives_check, piece_value};
 
@@ -49,15 +50,10 @@ pub struct MainMoveGenerator {
 }
 
 impl MainMoveGenerator {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        config: &EngineConfig,
         best_move: Option<Move>,
         prev_moves: PrevMoves,
-        quiet_check_bonus: i16,
-        quiet_check_see_margin: i16,
-        bad_quiet_threshold: i16,
-        escape_divisor: i16,
-        unsafe_square_divisor: i16,
         threats: BitBoard,
         enemy_attacks: BitBoard,
     ) -> Self {
@@ -72,11 +68,11 @@ impl MainMoveGenerator {
             good_quiets: ArrayVec::new(),
             bad_quiets: ArrayVec::new(),
 
-            quiet_check_bonus,
-            quiet_check_see_margin,
-            bad_quiet_threshold,
-            escape_divisor,
-            unsafe_square_divisor,
+            quiet_check_bonus: config.ordering_quiet_check_bonus,
+            quiet_check_see_margin: config.ordering_quiet_check_see_margin,
+            bad_quiet_threshold: config.ordering_bad_quiet_threshold,
+            escape_divisor: config.ordering_escape_divisor,
+            unsafe_square_divisor: config.ordering_unsafe_square_divisor,
             threats,
             enemy_attacks,
         }
