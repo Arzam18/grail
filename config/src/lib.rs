@@ -10,9 +10,9 @@ pub struct EngineConfig {
     pub syzygy_probe_depth: u8,
     pub chess960: bool,
 
-    pub aspiration_window_size: i16,
-    pub aspiration_window_depth_multiplier: i16,
-    pub aspiration_window_widen: i16,
+    pub aspiration_window_size: i32,
+    pub aspiration_window_depth_multiplier: i32,
+    pub aspiration_window_widen: i32,
     pub aspiration_window_depth: u8,
     pub aspiration_window_retries: i16,
     pub aspiration_score_divisor: i32,
