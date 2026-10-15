@@ -1,4 +1,5 @@
-use candle_nn::{VarBuilder, VarMap};
+use candle_core::{DType, Device};
+use candle_nn::VarBuilder;
 use cozy_chess::Color;
 use utils::{Node, flip_eval_perspective};
 
@@ -6,34 +7,21 @@ use crate::{
     encoding::encode_board_bitset,
     network::{NNUENetwork, Network, output_bucket},
 };
-use candle_core::{DType, Device};
 
 /// NNUE evaluator for inference.
-///
-/// The full-precision network field is kept around because candle's
-/// VarMap wants to register tensors before weights are loaded.
-/// Run enable_nnue() to quantize it into the nnue field for actual eval.
+#[derive(Clone)]
 pub struct Evaluator {
-    /// Quantized network for fast inference
-    nnue: Option<NNUENetwork>,
-
-    /// Full-precision network used to load weights before quantization
-    network: Network,
+    net: NNUENetwork,
 }
 
 impl Evaluator {
-    pub fn new(varmap: &VarMap, device: &Device) -> Self {
-        let vs = VarBuilder::from_varmap(varmap, DType::F32, device);
-        let network = Network::new(&vs).unwrap();
+    pub fn from_safetensors(bytes: &[u8]) -> candle_core::Result<Self> {
+        let vb = VarBuilder::from_slice_safetensors(bytes, DType::F32, &Device::Cpu)?;
+        let network = Network::new(&vb)?;
 
-        Self {
-            nnue: None,
-            network,
-        }
-    }
-
-    pub fn enable_nnue(&mut self) {
-        self.nnue = Some(NNUENetwork::from_network(&self.network).unwrap());
+        Ok(Self {
+            net: NNUENetwork::from_network(&network)?,
+        })
     }
 
     /// Runs the NNUE forward pass and returns the score from white's perspective.
@@ -65,11 +53,7 @@ impl Evaluator {
 
         let bucket = output_bucket(board);
 
-        let stm_score = self
-            .nnue
-            .as_mut()
-            .expect("NNUE network not initialized - call enable_nnue() first")
-            .forward(&white_bits, &black_bits, stm, bucket);
+        let stm_score = self.net.forward(&white_bits, &black_bits, stm, bucket);
 
         let stm_score = stm_score.clamp(i16::MIN as f32, i16::MAX as f32) as i16;
 

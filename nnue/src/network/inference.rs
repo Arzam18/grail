@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use candle_core::Result;
 use cozy_chess::Color;
 
@@ -11,6 +13,7 @@ use super::simd::{simd_add, simd_relu};
 use super::{EMBEDDING_SIZE, EVAL_OUTPUT_BOUND, FV_SCALE, HIDDEN_SIZE, OUTPUT_BUCKETS};
 
 /// NNUE inference engine with quantized weights and dual-perspective accumulators.
+#[derive(Clone)]
 pub struct NNUENetwork {
     accumulator: Accumulator,
     buckets: [OutputStack; OUTPUT_BUCKETS],
@@ -27,9 +30,9 @@ impl NNUENetwork {
         let buckets: [OutputStack; OUTPUT_BUCKETS] = std::array::from_fn(|i| {
             let bucket = network.buckets.get(i);
             OutputStack {
-                hidden1: LinearLayer::from_candle_linear(&bucket.hidden1).unwrap(),
-                hidden2: LinearLayer::from_candle_linear(&bucket.hidden2).unwrap(),
-                output: LinearLayer::from_candle_linear(&bucket.output).unwrap(),
+                hidden1: Arc::new(LinearLayer::from_candle_linear(&bucket.hidden1).unwrap()),
+                hidden2: Arc::new(LinearLayer::from_candle_linear(&bucket.hidden2).unwrap()),
+                output: Arc::new(LinearLayer::from_candle_linear(&bucket.output).unwrap()),
                 h1_buffer: [0.0; HIDDEN_SIZE],
                 h2_buffer: [0.0; HIDDEN_SIZE],
                 out_buffer: [0.0; 1],
@@ -69,10 +72,11 @@ impl NNUENetwork {
 }
 
 /// Hidden layers and output head for a single game phase.
+#[derive(Clone)]
 struct OutputStack {
-    hidden1: LinearLayer,
-    hidden2: LinearLayer,
-    output: LinearLayer,
+    hidden1: Arc<LinearLayer>,
+    hidden2: Arc<LinearLayer>,
+    output: Arc<LinearLayer>,
     h1_buffer: [f32; HIDDEN_SIZE],
     h2_buffer: [f32; HIDDEN_SIZE],
     out_buffer: [f32; 1],

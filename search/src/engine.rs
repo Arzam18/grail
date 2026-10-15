@@ -20,15 +20,11 @@ pub struct Engine {
     board: Board,
     game_history: AHashSet<u64>,
     searchers: Vec<Searcher>,
-    create_evaluator: fn() -> nnue::Evaluator,
+    evaluator: nnue::Evaluator,
 }
 
 impl Engine {
-    pub fn new(
-        config: &EngineConfig,
-        stop: Arc<AtomicBool>,
-        create_evaluator: fn() -> nnue::Evaluator,
-    ) -> Self {
+    pub fn new(config: &EngineConfig, stop: Arc<AtomicBool>, evaluator: nnue::Evaluator) -> Self {
         let shared = Arc::new(SharedSearcherState::new(config, stop));
 
         let mut engine = Self {
@@ -37,7 +33,7 @@ impl Engine {
             board: Board::default(),
             game_history: AHashSet::new(),
             searchers: Vec::new(),
-            create_evaluator,
+            evaluator,
         };
         engine.configure(config, true);
         engine
@@ -65,12 +61,11 @@ impl Engine {
 
         while self.searchers.len() < config.threads {
             let thread_id = self.searchers.len();
-            let evaluator = (self.create_evaluator)();
             self.searchers.push(Searcher::new(
                 Arc::clone(&self.shared),
                 thread_id,
                 config,
-                evaluator,
+                self.evaluator.clone(),
             ));
         }
         self.searchers.truncate(config.threads);

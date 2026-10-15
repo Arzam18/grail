@@ -7,10 +7,12 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 
 use config::EngineConfig;
+use search::Engine;
 use uci::{Decoder, UciConnection, UciInput, UciOutput, list_uci_options, set_uci_option};
 
-use crate::engine::create_engine;
 use crate::worker::{EngineCommand, EngineWorker};
+
+static NNUE_BYTES: &[u8] = include_bytes!("../../nnue/model.safetensors");
 
 const ENGINE_NAME: &str = "Grail";
 const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -38,7 +40,11 @@ impl Grail {
         let uci_tx = uci.output_sender();
 
         let config = EngineConfig::default();
-        let engine = create_engine(&config, Arc::clone(&stop));
+        let engine = Engine::new(
+            &config,
+            Arc::clone(&stop),
+            nnue::Evaluator::from_safetensors(NNUE_BYTES).expect("Failed to load embedded NNUE"),
+        );
 
         let worker = EngineWorker::new(engine, cmd_rx, uci_tx.clone());
         let worker_handle = thread::spawn(move || worker.run());

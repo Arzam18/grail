@@ -1274,8 +1274,6 @@ name = "grail"
 version = "3.0.0"
 dependencies = [
  "ahash",
- "candle-core",
- "candle-nn",
  "config",
  "cozy-chess",
  "nnue",
@@ -2693,8 +2691,6 @@ name = "tuning"
 version = "3.0.0"
 dependencies = [
  "ahash",
- "candle-core",
- "candle-nn",
  "clap",
  "config",
  "cozy-chess",

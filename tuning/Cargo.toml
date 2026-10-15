@@ -15,8 +15,6 @@ uci = { path = "../uci" }
 utils = { path = "../utils" }
 
 ahash = { workspace = true }
-candle-core = { workspace = true }
-candle-nn = { workspace = true }
 clap = { workspace = true }
 cozy-chess = { workspace = true }
 indicatif = { workspace = true }
