@@ -27,36 +27,46 @@ impl Engine {
     pub fn new(config: &EngineConfig, stop: Arc<AtomicBool>, evaluator: nnue::Evaluator) -> Self {
         let shared = Arc::new(SharedSearcherState::new(config, stop));
 
-        let mut engine = Self {
+        if !config.syzygy_path.is_empty() {
+            shared.init_tablebases(&config.syzygy_path);
+        }
+
+        let searchers = (0..config.threads)
+            .map(|thread_id| {
+                Searcher::new(Arc::clone(&shared), thread_id, config, evaluator.clone())
+            })
+            .collect();
+
+        Self {
             config: config.clone(),
             shared,
             board: Board::default(),
             game_history: AHashSet::new(),
-            searchers: Vec::new(),
+            searchers,
             evaluator,
-        };
-        engine.configure(config, true);
-        engine
+        }
     }
 
-    pub fn configure(&mut self, config: &EngineConfig, init: bool) {
-        let old_config = self.config.clone();
-        self.config = config.clone();
-
-        if init || old_config.hash_size != config.hash_size {
+    pub fn configure(&mut self, config: &EngineConfig) {
+        if self.config.hash_size != config.hash_size {
             *self.shared.tt() = TranspositionTable::new(config.hash_size as usize);
         }
 
-        if init || !self.shared.correction().matches_config(config) {
+        if !self.shared.correction().matches_config(config) {
             self.shared.correction().configure(config);
         }
 
-        if init || old_config.syzygy_path != config.syzygy_path {
+        if self.config.syzygy_path != config.syzygy_path {
             if config.syzygy_path.is_empty() {
                 self.shared.clear_tablebases();
             } else {
                 self.shared.init_tablebases(&config.syzygy_path);
             }
+        }
+
+        self.searchers.truncate(config.threads);
+        for searcher in &mut self.searchers {
+            searcher.configure(config);
         }
 
         while self.searchers.len() < config.threads {
@@ -68,11 +78,8 @@ impl Engine {
                 self.evaluator.clone(),
             ));
         }
-        self.searchers.truncate(config.threads);
 
-        for searcher in &mut self.searchers {
-            searcher.configure(config);
-        }
+        self.config.clone_from(config);
     }
 
     pub fn new_game(&mut self) {

@@ -85,7 +85,7 @@ impl EngineWorker {
                     self.engine.new_game();
                 }
                 EngineCommand::Configure(config) => {
-                    self.engine.configure(&config, false);
+                    self.engine.configure(&config);
                 }
                 EngineCommand::Display => {
                     display_position(self.engine.board(), self.last_search.as_ref())
