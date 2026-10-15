@@ -67,6 +67,7 @@ impl MultiPvSearchContext {
         &mut self,
         count: usize,
         window_size: i16,
+        window_depth_multiplier: i16,
         window_widen: i16,
         window_depth: u8,
         score_divisor: i32,
@@ -75,8 +76,13 @@ impl MultiPvSearchContext {
         self.excluded.clear();
 
         for _ in 0..count {
-            let window =
-                AspirationWindow::new(window_size, window_widen, window_depth, score_divisor);
+            let window = AspirationWindow::new(
+                window_size,
+                window_depth_multiplier,
+                window_widen,
+                window_depth,
+                score_divisor,
+            );
             self.lines.push(PvSearchContext::new(window));
         }
     }

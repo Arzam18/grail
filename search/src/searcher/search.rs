@@ -214,6 +214,7 @@ impl Searcher {
         self.multi_pv.init(
             self.config.multi_pv as usize,
             self.config.aspiration_window_size,
+            self.config.aspiration_window_depth_multiplier,
             self.config.aspiration_window_widen,
             self.config.aspiration_window_depth,
             self.config.aspiration_score_divisor,

@@ -11,6 +11,7 @@ pub struct EngineConfig {
     pub chess960: bool,
 
     pub aspiration_window_size: i16,
+    pub aspiration_window_depth_multiplier: i16,
     pub aspiration_window_widen: i16,
     pub aspiration_window_depth: u8,
     pub aspiration_window_retries: i16,
@@ -122,6 +123,7 @@ impl Default for EngineConfig {
             chess960: false,
 
             aspiration_window_size: 40,
+            aspiration_window_depth_multiplier: 10,
             aspiration_window_widen: 2,
             aspiration_window_depth: 5,
             aspiration_window_retries: 3,
