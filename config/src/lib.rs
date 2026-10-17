@@ -11,7 +11,6 @@ pub struct EngineConfig {
     pub chess960: bool,
 
     pub aspiration_window_size: i32,
-    pub aspiration_window_depth_multiplier: i32,
     pub aspiration_window_widen: i32, // in cents
     pub aspiration_window_depth: u8,
     pub aspiration_window_retries: i16,
@@ -42,7 +41,6 @@ pub struct EngineConfig {
     pub reduction_cut_node: i32,
     pub reduction_not_improving: i32,
     pub reduction_quiets_if_tt_capture: i32,
-    pub anti_reduction_near_root: i32,
     pub anti_reduction_pv_node: i32,
     pub anti_reduction_pv_move: i32,
     pub anti_reduction_tactical: i32,
@@ -122,10 +120,9 @@ impl Default for EngineConfig {
             syzygy_probe_depth: 1,
             chess960: false,
 
-            aspiration_window_size: 40,
-            aspiration_window_depth_multiplier: 10,
-            aspiration_window_widen: 200, // in cents
-            aspiration_window_depth: 5,
+            aspiration_window_size: 37,
+            aspiration_window_widen: 132, // in cents
+            aspiration_window_depth: 4,
             aspiration_window_retries: 3,
             aspiration_score_divisor: 16384,
 
@@ -154,7 +151,6 @@ impl Default for EngineConfig {
             reduction_cut_node: 1024,
             reduction_not_improving: 1024,
             reduction_quiets_if_tt_capture: 1024,
-            anti_reduction_near_root: 1024,
             anti_reduction_pv_node: 1024,
             anti_reduction_pv_move: 1024,
             anti_reduction_tactical: 1024,
