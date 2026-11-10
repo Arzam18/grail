@@ -353,8 +353,6 @@ impl Searcher {
         let mut best_move = None;
         let mut best_move_depth = 0;
 
-        let threats = node.threats();
-
         let best_move_hint = if ply == 0 {
             // At root we can use the currently best move for ordering
             self.multi_pv.best_move_hint()
@@ -362,14 +360,7 @@ impl Searcher {
             tt_move
         };
 
-        let enemy_attacks = node.attacks_for(!node.side_to_move());
-        let mut movegen = MainMoveGenerator::new(
-            &self.config,
-            best_move_hint,
-            prev_moves,
-            threats,
-            enemy_attacks,
-        );
+        let mut movegen = MainMoveGenerator::new(&self.config, best_move_hint, prev_moves);
 
         // Used for punishing potentially "bad" quiet moves that were searched before a potential beta cutoff
         let mut quiets_searched: ArrayVec<Move, { MAX_QUIETS }> = ArrayVec::new();
@@ -461,11 +452,19 @@ impl Searcher {
 
         // Check for terminal position (no legal moves)
         if move_index == -1 {
-            return if in_check {
+            let value = if in_check {
                 -(MATE_VALUE - ply as i16) // Checkmate
             } else {
                 0 // Stalemate
             };
+
+            // Ok so I lied... If we are in singular we excluded the only legal move (not terminal).
+            // in that case no other move can beat the threshold, so this has to fail low.
+            if singular.is_some() {
+                return value.min(original_bounds.alpha);
+            }
+
+            return value;
         }
 
         // Let's not store a partial result in the TT / correction.
@@ -474,8 +473,7 @@ impl Searcher {
         }
 
         // Use original alpha when storing in tables, since the bound type depends on the original expectation.
-        // Alpha may have been raised during search, but the bound type depends on
-        // whether we improved.
+        // Alpha may have been raised during search, but the bound type depends on if  we improved.
         if singular.is_none() {
             self.shared.tt().store(
                 hash,
@@ -547,7 +545,7 @@ impl Searcher {
         let hist = if is_capture {
             self.capture_history.get(node.board(), m)
         } else {
-            self.history_heuristic.get(moved_color, m.from, m.to)
+            self.history_heuristic.get(node, m)
         };
         let cont_hist = self.continuation_history.get(prev_moves, moved);
 
@@ -579,13 +577,13 @@ impl Searcher {
             corrected_eval,
         );
 
-        let extension = self.get_extension(node, &m, moved_piece, is_capture);
-        let extension = (extension + extra_extension).max(0) as u8;
+        let extension = self.get_extension(node, &m, moved_piece, is_capture) + extra_extension;
+        let extended_depth = depth.saturating_add_signed(extension);
 
-        let mut adjusted_depth = depth.saturating_add(extension).saturating_sub(reduction);
+        let mut search_depth = extended_depth.saturating_sub(reduction);
 
         if self.try_futility_prune(
-            adjusted_depth,
+            search_depth,
             in_check,
             is_tactical,
             is_pv_move,
@@ -605,7 +603,7 @@ impl Searcher {
         self.search_stack.push_move(&child, moved);
         let mut value = -self.search_node(
             &child,
-            adjusted_depth.saturating_sub(1),
+            search_depth.saturating_sub(1),
             ply.saturating_add(1),
             child_bounds,
             true,
@@ -621,13 +619,12 @@ impl Searcher {
                 child.set_type(child.node_type().inverted());
             }
 
-            // Search at full depth
-            adjusted_depth = depth.saturating_add(extension);
+            search_depth = extended_depth;
 
             self.search_stack.push_move(&child, moved);
             value = -self.search_node(
                 &child,
-                adjusted_depth.saturating_sub(1),
+                search_depth.saturating_sub(1),
                 ply.saturating_add(1),
                 child_bounds,
                 true,
@@ -642,7 +639,7 @@ impl Searcher {
             self.search_stack.push_move(&child, moved);
             value = -self.search_node(
                 &child,
-                adjusted_depth.saturating_sub(1),
+                search_depth.saturating_sub(1),
                 ply.saturating_add(1),
                 bounds.invert(),
                 true,
@@ -652,7 +649,7 @@ impl Searcher {
 
         let is_quiet = !is_capture && !is_promotion;
 
-        Some((value, is_quiet, adjusted_depth))
+        Some((value, is_quiet, search_depth))
     }
 
     /// Updates the history tables after a beta cutoff: boost the cutting move,
@@ -671,7 +668,7 @@ impl Searcher {
 
         if is_quiet {
             let bonus = self.history_heuristic.get_bonus(depth);
-            self.history_heuristic.update(board, mv, bonus);
+            self.history_heuristic.update(node, mv, bonus);
 
             let cont_bonus = self.continuation_history.get_bonus(depth);
             self.continuation_history
@@ -685,7 +682,7 @@ impl Searcher {
             let quiet_malus = self.history_heuristic.get_malus(depth);
             let cont_malus = self.continuation_history.get_malus(depth);
             for &q in quiets_searched {
-                self.history_heuristic.update(board, q, quiet_malus);
+                self.history_heuristic.update(node, q, quiet_malus);
                 self.continuation_history
                     .update_quiet_all(board, prev_moves, q, cont_malus);
             }
