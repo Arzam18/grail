@@ -96,7 +96,7 @@ pub struct EngineConfig {
     pub singular_beta_margin: i16,
     pub double_extension_margin: i16,
     pub double_extension_overshoot_penalty: i16,
-    pub negative_extension: i8,
+    pub negative_extension: i32,
 
     pub correction_history_max_correction: i32,
     pub correction_table_size: usize,
@@ -129,9 +129,9 @@ impl Default for EngineConfig {
             aspiration_score_divisor: 16384,
 
             history_max_value: 512,
-            history_prune_depth_multiplier: -80,
+            history_prune_depth_multiplier: -77,
             history_bonus_multiplier: 13,
-            history_malus_multiplier: 4,
+            history_malus_multiplier: 5,
 
             capture_history_max_value: 512,
             capture_history_bonus_multiplier: 9,
@@ -144,7 +144,7 @@ impl Default for EngineConfig {
 
             ordering_quiet_check_bonus: 1000,
             ordering_quiet_check_see_margin: 35,
-            ordering_bad_quiet_threshold: -56,
+            ordering_bad_quiet_threshold: -53,
             ordering_escape_divisor: 4,
             ordering_unsafe_square_divisor: 20,
 
@@ -160,7 +160,7 @@ impl Default for EngineConfig {
             anti_reduction_threat: 544,
             anti_reduction_check: 1010,
 
-            reduction_history_divisor: 266,
+            reduction_history_divisor: 263,
             reduction_capture_history_divisor: 132,
             reduction_cont_hist_divisor: 984,
             reduction_alpha_gap_scale: 2,
@@ -208,7 +208,7 @@ impl Default for EngineConfig {
             singular_beta_margin: 200,
             double_extension_margin: 50,
             double_extension_overshoot_penalty: 2,
-            negative_extension: 1,
+            negative_extension: 1024,
 
             correction_history_max_correction: 1024,
             correction_table_size: 16384,
