@@ -1,7 +1,7 @@
 use arrayvec::ArrayVec;
 use config::EngineConfig;
 use cozy_chess::{Move, Piece};
-use utils::{PAWN_VALUE, captured_piece, gives_check, piece_value};
+use utils::{CheckChecker, PAWN_VALUE, captured_piece, piece_value};
 
 use crate::history::{CaptureHistory, ContinuationHistory, HistoryHeuristic, PieceTo, PrevMoves};
 use crate::utils::see::see;
@@ -145,16 +145,18 @@ impl MainMoveGenerator {
         if self.gen_phase == Phase::GenQuiets {
             self.gen_phase = Phase::GoodQuiets;
 
-            let empty_squares = !board.occupied();
-            let our_pieces = board.colors(board.side_to_move());
+            let check_checker = CheckChecker::new(board);
+
+            // Quiet = wherever our opponent does not have pieces.
+            // includes our own pieces because cozy notes castling as rook self-capture.
+            let quiet_squares = !board.colors(!board.side_to_move());
 
             board.generate_moves(|moves| {
-                for mov in moves {
-                    // Allow moves to empty squares OR castling (king captures own rook in cozy-chess)
-                    let is_castling = our_pieces.has(mov.to);
-                    if !empty_squares.has(mov.to) && !is_castling {
-                        continue;
-                    }
+                let mut quiets = moves;
+                quiets.to &= quiet_squares;
+                let piece = quiets.piece;
+
+                for mov in quiets {
                     if Some(mov) == self.best_move {
                         continue;
                     }
@@ -169,7 +171,6 @@ impl MainMoveGenerator {
                             let mut score = 0;
 
                             let color = board.side_to_move();
-                            let piece = board.piece_on(mov.from).unwrap();
 
                             score += history_heuristic.get(node, mov);
 
@@ -177,10 +178,10 @@ impl MainMoveGenerator {
                             score += continuation_history.get(&self.prev_moves, curr);
 
                             let value = piece_value(piece);
-                            let (to_unsafe, escapes_threat) = node.move_safety(mov);
+                            let (to_unsafe, escapes_threat) = node.move_safety(mov, piece);
 
                             // Gives check = great (sometimes)
-                            if gives_check(board, mov)
+                            if check_checker.gives_check(mov)
                                 // Try to filter out "junk checks" that just hang material
                                 && (!to_unsafe || see(board, mov, -self.quiet_check_see_margin))
                             {
