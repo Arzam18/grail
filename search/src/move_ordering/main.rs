@@ -105,7 +105,7 @@ impl MainMoveGenerator {
 
                     self.good_captures.push(ScoredMove {
                         mov,
-                        score: capture_score(board, mov, capture_history),
+                        score: capture_score(board, mov, moves.piece, capture_history),
                     });
                 }
                 false
@@ -181,7 +181,7 @@ impl MainMoveGenerator {
                             let (to_unsafe, escapes_threat) = node.move_safety(mov, piece);
 
                             // Gives check = great (sometimes)
-                            if check_checker.gives_check(mov)
+                            if check_checker.gives_check(mov, piece)
                                 // Try to filter out "junk checks" that just hang material
                                 && (!to_unsafe || see(board, mov, -self.quiet_check_see_margin))
                             {

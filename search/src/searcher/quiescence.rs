@@ -19,7 +19,7 @@ impl Searcher {
     /// for a reliable static evaluation.
     ///
     /// <https://www.chessprogramming.org/Quiescence_Search>
-    pub(super) fn quiescence_search(&mut self, node: &Node, mut bounds: Bounds, ply: u8) -> i16 {
+    pub fn quiescence_search(&mut self, node: &Node, mut bounds: Bounds, ply: u8) -> i16 {
         self.pv_table.init_ply(ply);
 
         // Check if we should stop searching
@@ -29,6 +29,9 @@ impl Searcher {
 
         self.max_ply_reached = self.max_ply_reached.max(ply);
 
+        if node.is_stalemate() {
+            return 0;
+        }
         if self.is_forced_draw(node) {
             return self.draw_value();
         }
@@ -50,7 +53,6 @@ impl Searcher {
 
         let board = node.board();
         let in_check = node.in_check();
-
         let original_bounds = bounds;
 
         let tt_info = self.shared.tt().probe(hash, ply);

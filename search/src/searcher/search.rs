@@ -7,7 +7,7 @@ use uci::{
     UciOutput,
     commands::{GoParams, Info, Score},
 };
-use utils::{FracPly, Node, NodeType, has_legal_moves};
+use utils::{FracPly, Node, NodeType, captured_piece, has_legal_moves};
 
 use crate::{
     aspiration::Pass,
@@ -217,7 +217,7 @@ impl Searcher {
     /// Alpha-beta search with principal variation search (PVS) and late move reductions.
     ///
     /// <https://www.chessprogramming.org/Principal_Variation_Search>
-    pub(super) fn search_node(
+    pub fn search_node(
         &mut self,
         node: &Node,
         depth: u8,
@@ -324,7 +324,8 @@ impl Searcher {
             }
         }
 
-        let is_improving = !in_check && self.search_stack.is_improving();
+        let eval_delta = self.search_stack.eval_delta();
+        let is_improving = !in_check && eval_delta.is_some_and(|delta| delta.is_improving());
 
         if let Some(score) = self.try_reverse_futility_prune(
             node,
@@ -543,7 +544,8 @@ impl Searcher {
 
         let moved = PieceTo::new(moved_color, moved_piece, m.to);
         let hist = if is_capture {
-            self.capture_history.get(node.board(), m)
+            let victim = captured_piece(node.board(), m).unwrap();
+            self.capture_history.get(moved_piece, m.to, victim)
         } else {
             self.history_heuristic.get(node, m)
         };
@@ -655,7 +657,7 @@ impl Searcher {
 
     /// Updates the history tables after a beta cutoff: boost the cutting move,
     /// apply malus to the moves we searched before it.
-    pub(super) fn on_fail_high(
+    fn on_fail_high(
         &mut self,
         node: &Node,
         mv: Move,
